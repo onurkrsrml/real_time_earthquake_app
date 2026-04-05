@@ -1,0 +1,17 @@
+[project]
+name = "real-time-earthquake-app"
+version = "0.1.0"
+description = "Real-time Earthquake App"
+authors = [
+    { name = "Your Name", email = "", url = "" },
+    { name = "Your Friend's Name", email = "", url = "" },
+    { name = "Your Other Friend's Name", email = "", url = "" }
+]
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "ipython>=9.12.0",
+    "obspy>=1.5.0",
+    "pandas>=3.0.2",
+    "requests>=2.33.1",
+]

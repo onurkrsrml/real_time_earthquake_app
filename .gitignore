@@ -1,0 +1,22 @@
+# PyCharm ve IDE Ayarları
+.idea/
+*.iml
+
+# Sanal Ortamlar
+.venv/
+venv/
+env/
+uvenv/
+
+# Çevre Değişkenleri ve Sırlar (ÇOK ÖNEMLİ)
+.env
+.env.local
+.env.*
+
+# Python Cache Dosyaları
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Sirlar
+.env
