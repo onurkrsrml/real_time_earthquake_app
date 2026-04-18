@@ -17,6 +17,3 @@ uvenv/
 __pycache__/
 *.py[cod]
 *$py.class
-
-# Sirlar
-.env

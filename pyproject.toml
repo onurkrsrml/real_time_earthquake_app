@@ -11,7 +11,12 @@ readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
     "ipython>=9.12.0",
+    "missingno>=0.5.2",
     "obspy>=1.5.0",
     "pandas>=3.0.2",
     "requests>=2.33.1",
+    "scikit-learn==1.8.0",
+    "seaborn>=0.13.2",
+    "st>=0.0.8",
+    "streamlit>=1.56.0",
 ]
