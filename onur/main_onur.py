@@ -105,6 +105,11 @@ def load_df():
     return data
 df = load_df()
 
+def load_dff():
+    data = pd.read_csv("data/earthquakes_featured.csv")
+    return data
+dff = load_dff()
+
 
 # Check Df
 # ----------------------------------------

@@ -19,6 +19,7 @@ dependencies = [
     "requests>=2.33.1",
     "reverse-geocoder>=1.5.1",
     "scikit-learn==1.8.0",
+    "scipy-stubs~=1.17.1",
     "seaborn>=0.13.2",
     "st>=0.0.8",
     "streamlit>=1.56.0",

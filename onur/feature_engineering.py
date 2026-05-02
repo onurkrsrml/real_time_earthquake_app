@@ -6,7 +6,7 @@
 Feature Engineering Module – Real-Time Earthquake App
 ======================================================
 Reads   : data/depremler_hava_nasa.csv
-Outputs : data/depremler_hava_nasa_enhanced.csv
+Outputs : data/earthquakes_featured.csv
 
 New features are split into four categories:
   1. Seismic Dynamics          (6 features)
@@ -29,9 +29,9 @@ warnings.simplefilter(action="ignore")
 # ──────────────────────────────────────────────────────────────────────────────
 # Paths & Constants
 # ──────────────────────────────────────────────────────────────────────────────
-_BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-INPUT_PATH  = os.path.join(_BASE_DIR, "data", "depremler_hava_nasa.csv")
-OUTPUT_PATH = os.path.join(_BASE_DIR, "data", "depremler_hava_nasa_enhanced.csv")
+_BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__name__)))
+INPUT_PATH  = os.path.join("data/depremler_hava_nasa.csv")
+OUTPUT_PATH = os.path.join("data/earthquakes_featured.csv")
 
 RANDOM_SEED      = 42
 SEISMIC_WINDOW   = "365D"   # rolling window for seismic dynamics
@@ -52,7 +52,7 @@ def load_data(path: str = INPUT_PATH) -> pd.DataFrame:
     df["time"] = pd.to_datetime(df["time"])
     df = df.sort_values("time").reset_index(drop=True)
     return df
-
+load_data(path=INPUT_PATH)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # 1. Seismic Dynamics (Time-Varying Statistics)
@@ -495,6 +495,19 @@ def run_feature_engineering(
 
     return df
 
+def check_df(dataframe, head=5):
+    print("##################### Shape #####################")
+    print(dataframe.shape)
+    print("##################### Types #####################")
+    print(dataframe.dtypes)
+    print("##################### Head #####################")
+    print(dataframe.head(head))
+    print("##################### Tail #####################")
+    print(dataframe.tail(head))
+    print("##################### NA #####################")
+    print(dataframe.isnull().sum())
+    # print("##################### Quantiles #####################")
+    # print(dataframe.quantile([0, 0.05, 0.50, 0.95, 0.99, 1]).T)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Entry Point
