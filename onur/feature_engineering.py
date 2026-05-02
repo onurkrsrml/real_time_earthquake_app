@@ -330,7 +330,106 @@ def add_time_series_features(df: pd.DataFrame) -> pd.DataFrame:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 5. Main Pipeline
+# 5. Data Imputation
+# ──────────────────────────────────────────────────────────────────────────────
+def impute_missing_values(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Smart imputation for the 27 engineered features.
+
+    Strategies
+    ----------
+    mag_lag_{1,3,7,30}d
+        Forward-fill (last valid magnitude average repeated) →
+        fallback to global magnitude mean →
+        final fallback: backward-fill.
+
+    count_lag_{1,3,7,30}d
+        Forward-fill then backward-fill.
+        (minimal missingness, trend is preserved)
+
+    depth_migration
+        Linear interpolation with limit_direction='both'.
+        (continuous physical variable, smooth transition)
+
+    b_value_trend
+        Step 1 – backward-fill (slow-changing stress indicator, old value repeatable)
+        Step 2 – linear interpolation (smooth transition)
+        Step 3 – global b-value mean (final fallback)
+
+    gutenberg_deviation
+        Step 1 – backward-fill (trend continues)
+        Step 2 – linear interpolation
+        Step 3 – 0.0 (null hypothesis: observed == expected)
+    """
+    df = df.copy()
+
+    IMPUTED_COLS = (
+        [f"mag_lag_{d}d"   for d in [1, 3, 7, 30]]
+        + [f"count_lag_{d}d" for d in [1, 3, 7, 30]]
+        + ["depth_migration", "b_value_trend", "gutenberg_deviation"]
+    )
+
+    # ── Before report ─────────────────────────────────────────────────────────
+    print("\n  [Imputation] Missing values BEFORE:")
+    for col in IMPUTED_COLS:
+        if col in df.columns:
+            n = df[col].isna().sum()
+            print(f"    {col:<35}  nulls={n:,}")
+
+    # ── 1. mag_lag_{1,3,7,30}d  – Forward Fill → global mean → backward fill ──
+    global_mag_mean = df["magnitude"].mean()
+    for d in [1, 3, 7, 30]:
+        col = f"mag_lag_{d}d"
+        if col not in df.columns:
+            continue
+        df[col] = df[col].ffill().fillna(global_mag_mean).bfill()
+
+    # ── 2. count_lag_{1,3,7,30}d  – Forward Fill → backward fill ─────────────
+    for d in [1, 3, 7, 30]:
+        col = f"count_lag_{d}d"
+        if col not in df.columns:
+            continue
+        df[col] = df[col].ffill().bfill()
+
+    # ── 3. depth_migration  – Linear Interpolation ────────────────────────────
+    if "depth_migration" in df.columns:
+        df["depth_migration"] = df["depth_migration"].interpolate(
+            method="linear", limit_direction="both"
+        )
+
+    # ── 4. b_value_trend  – bfill → interpolate → global b-value mean ─────────
+    if "b_value_trend" in df.columns:
+        df["b_value_trend"] = (
+            df["b_value_trend"]
+            .bfill()
+            .interpolate(method="linear", limit_direction="both")
+        )
+        global_b_mean = df["b_value_trend"].mean()
+        if np.isnan(global_b_mean):
+            global_b_mean = 1.0   # typical seismic b-value
+        df["b_value_trend"] = df["b_value_trend"].fillna(global_b_mean)
+
+    # ── 5. gutenberg_deviation  – bfill → interpolate → 0 ────────────────────
+    if "gutenberg_deviation" in df.columns:
+        df["gutenberg_deviation"] = (
+            df["gutenberg_deviation"]
+            .bfill()
+            .interpolate(method="linear", limit_direction="both")
+            .fillna(0.0)
+        )
+
+    # ── After report ──────────────────────────────────────────────────────────
+    print("\n  [Imputation] Missing values AFTER:")
+    for col in IMPUTED_COLS:
+        if col in df.columns:
+            n = df[col].isna().sum()
+            print(f"    {col:<35}  nulls={n:,}")
+
+    return df
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 6. Main Pipeline
 # ──────────────────────────────────────────────────────────────────────────────
 def run_feature_engineering(
     input_path:  str = INPUT_PATH,
@@ -348,38 +447,43 @@ def run_feature_engineering(
     print("=" * 65)
 
     # ── Step 1: Load ──────────────────────────────────────────────────────────
-    print(f"\n[1/5] Loading data …  ({input_path})")
+    print(f"\n[1/6] Loading data …  ({input_path})")
     df = load_data(input_path)
     print(f"      Rows: {len(df):,}   Columns: {df.shape[1]}")
 
     original_cols = set(df.columns)
 
     # ── Step 2: Seismic Dynamics ──────────────────────────────────────────────
-    print("\n[2/5] Seismic Dynamics (b-value, depth migration, quietness, "
+    print("\n[2/6] Seismic Dynamics (b-value, depth migration, quietness, "
           "energy, volatility, GR deviation) …")
     df = add_seismic_dynamics(df)
 
     # ── Step 3: Geophysical & Sensor ──────────────────────────────────────────
-    print("[3/5] Geophysical & Sensor features (strain, GPS, radon, "
+    print("[3/6] Geophysical & Sensor features (strain, GPS, radon, "
           "groundwater, EM) …")
     df = add_geophysical_features(df)
 
     # ── Step 4: Environmental Triggers ────────────────────────────────────────
-    print("[4/5] Environmental triggers (pressure drop, thermal anomaly, "
+    print("[4/6] Environmental triggers (pressure drop, thermal anomaly, "
           "tidal stress) …")
     df = add_environmental_features(df)
 
     # ── Step 5: Time Series Engineering ───────────────────────────────────────
-    print("[5/5] Time series engineering (cyclic encoding, lags, clustering) …")
+    print("[5/6] Time series engineering (cyclic encoding, lags, clustering) …")
     df = add_time_series_features(df)
 
-    # ── Summary ───────────────────────────────────────────────────────────────
+    # ── Summary (before imputation) ───────────────────────────────────────────
     new_cols = [c for c in df.columns if c not in original_cols]
     print(f"\n{'─' * 65}")
     print(f"New features added: {len(new_cols)}")
     for col in new_cols:
         nulls = df[col].isna().sum()
         print(f"  {col:<35}  nulls={nulls:,}")
+
+    # ── Step 6: Data Imputation ───────────────────────────────────────────────
+    print(f"\n{'─' * 65}")
+    print("[6/6] Data imputation (smart fill for all 27 new features) …")
+    df = impute_missing_values(df)
 
     # ── Save ──────────────────────────────────────────────────────────────────
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
