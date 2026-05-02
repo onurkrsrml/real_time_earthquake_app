@@ -8,29 +8,31 @@ pd.set_option('display.max_columns', None)
 pd.set_option('display.float_format', lambda x: '%.3f' % x)
 pd.set_option('display.width', 500)
 
-FILE_NAME = "data/earthquakes_1600_to_2026.csv"
-MIN_MAGNITUDE_MODERN = 0.1
-MIN_MAGNITUDE_HISTORICAL = 5.5
-GAP_THRESHOLD_DAYS = 2
+FILE_NAME = "data/earthquakes_turkey_1900_onwards.csv"
+MIN_MAGNITUDE = 0.1
 
-def fetch_usgs_paginated(start_date, end_date, min_magnitude, query_name="Sorgu"):
-
+def fetch_usgs_paginated_turkey(start_date, end_date, min_magnitude, query_name="Sorgu"):
     url = "https://earthquake.usgs.gov/fdsnws/event/1/query"
     all_earthquakes = []
     current_end = end_date
     max_retries = 5
     retry_delay = 5
 
-    print(f"\n--- {query_name} Deprem Verisi Toplama Başlıyor ---")
+    print(f"\n--- {query_name} Türkiye Deprem Verisi Toplama Başlıyor ---")
 
     while True:
+        # Türkiye yaklaşık koordinatları (Bounding box)
         params = {
             "format": "geojson",
             "starttime": start_date,
             "endtime": current_end,
             "minmagnitude": min_magnitude,
             "orderby": "time",
-            "limit": 20000
+            "limit": 20000,
+            "minlatitude": 35.8,
+            "maxlatitude": 42.1,
+            "minlongitude": 25.6,
+            "maxlongitude": 44.8
         }
 
         retries = 0
@@ -41,8 +43,7 @@ def fetch_usgs_paginated(start_date, end_date, min_magnitude, query_name="Sorgu"
                 if response.status_code == 200:
                     break
                 elif response.status_code in [429, 503, 504]:
-                    print(
-                        f"Hata {response.status_code}: Sunucu meşgul. {retry_delay}sn sonra tekrar... ({retries + 1}/{max_retries})")
+                    print(f"Hata {response.status_code}: Sunucu meşgul. {retry_delay}sn sonra tekrar... ({retries + 1}/{max_retries})")
                     time.sleep(retry_delay)
                     retries += 1
                 else:
@@ -90,7 +91,7 @@ def fetch_usgs_paginated(start_date, end_date, min_magnitude, query_name="Sorgu"
 
     return pd.DataFrame(all_earthquakes)
 
-def fetch_usgs_chunked(start_date, end_date, min_magnitude, query_name="Sorgu"):
+def fetch_usgs_chunked_turkey(start_date, end_date, min_magnitude, query_name="Sorgu"):
     start_dt = datetime.strptime(start_date, "%Y-%m-%dT%H:%M:%S")
     end_dt = datetime.strptime(end_date, "%Y-%m-%dT%H:%M:%S")
 
@@ -106,82 +107,33 @@ def fetch_usgs_chunked(start_date, end_date, min_magnitude, query_name="Sorgu"):
         s_str = current_start.strftime("%Y-%m-%dT%H:%M:%S")
         e_str = current_end.strftime("%Y-%m-%dT%H:%M:%S")
 
-        df_chunk = fetch_usgs_paginated(s_str, e_str, min_magnitude, query_name=f"{query_name} ({current_start.year})")
+        df_chunk = fetch_usgs_paginated_turkey(s_str, e_str, min_magnitude, query_name=f"{query_name} ({current_start.year})")
         if not df_chunk.empty:
             all_dfs.append(df_chunk)
         current_start = current_end
 
     return pd.concat(all_dfs, ignore_index=True) if all_dfs else pd.DataFrame()
 
+def build_turkey_dataset():
+    print("\n=== TÜRKİYE İÇİN SIFIRDAN VERİ TOPLAMA BAŞLATILDI ===")
 
-def build_initial_dataset():
-    print("\n=== SIFIRDAN VERİ TOPLAMA BAŞLATILDI ===")
+    # 1900 sonrasındaki bütün depremler
+    now_str = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    df_modern = fetch_usgs_chunked_turkey("1900-01-01T00:00:00", now_str, MIN_MAGNITUDE, "MODERN_TR")
 
-    df_hist = fetch_usgs_paginated("1600-01-01T00:00:00", "1899-12-31T23:59:59", MIN_MAGNITUDE_HISTORICAL, "TARİHSEL")
-
-    # Default olarak 1 Nisan 2026 baz alındı ancak ihtiyaç halinde anlık tarih ve zaman seçilebilir.
-    # now_str = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
-    now_str = "2026-04-01T00:00:00"
-    df_modern = fetch_usgs_chunked("1900-01-01T00:00:00", now_str, MIN_MAGNITUDE_MODERN, "MODERN")
-
-    df_final = pd.concat([df_hist, df_modern], ignore_index=True)
-    df_final.sort_values(by="time", inplace=True)
-    df_final.drop_duplicates(subset=["id"], inplace=True)
-
-    df_final.to_csv(FILE_NAME, index=False)
-    print(f"\nİşlem Tamam! {len(df_final)} kayıt kaydedildi.")
-    return df_final
-
-
-def find_and_fill_gaps(csv_path):
-    if not os.path.exists(csv_path):
-        return build_initial_dataset()
-
-    print(f"\n--- {csv_path} kontrol ediliyor... ---")
-    df = pd.read_csv(csv_path)
-    df['time'] = pd.to_datetime(df['time'])
-    df = df.sort_values(by='time').reset_index(drop=True)
-
-    df['time_diff'] = df['time'].diff()
-    gaps = df[df['time_diff'] > pd.Timedelta(days=GAP_THRESHOLD_DAYS)]
-
-    if gaps.empty:
-        print("Boşluk bulunamadı. Veri seti tam görünüyor.")
-        return df
-
-    print(f"DİKKAT: {len(gaps)} adet zaman boşluğu bulundu. Yamalar yapılıyor...")
-    new_data_frames = []
-
-    for index, row in gaps.iterrows():
-        end_gap = row['time']
-        start_gap = df.iloc[index - 1]['time']
-
-        mag = MIN_MAGNITUDE_MODERN if start_gap.year >= 1900 else MIN_MAGNITUDE_HISTORICAL
-
-        s_str = start_gap.strftime("%Y-%m-%dT%H:%M:%S")
-        e_str = end_gap.strftime("%Y-%m-%dT%H:%M:%S")
-
-        print(f"Eksik Aralığı Dolduruluyor: {s_str} -> {e_str}")
-        df_missing = fetch_usgs_paginated(s_str, e_str, min_magnitude=mag, query_name="YAMA")
-
-        if not df_missing.empty:
-            new_data_frames.append(df_missing)
-
-    if new_data_frames:
-        df_combined = pd.concat([df] + new_data_frames, ignore_index=True)
-        df_combined = df_combined.drop(columns=['time_diff'], errors='ignore')
-        df_combined.sort_values(by='time', inplace=True)
-        df_combined.drop_duplicates(subset=['id'], inplace=True)
-
-        df_combined.to_csv(csv_path, index=False)
-        print(f"Veri seti güncellendi! Yeni satır sayısı: {len(df_combined)}")
-        return df_combined
-
-    return df
-
+    if not df_modern.empty:
+        df_modern.sort_values(by="time", inplace=True)
+        df_modern.drop_duplicates(subset=["id"], inplace=True)
+        
+        # data dizini yoksa oluştur
+        os.makedirs(os.path.dirname(FILE_NAME), exist_ok=True)
+        
+        df_modern.to_csv(FILE_NAME, index=False)
+        print(f"\nİşlem Tamam! {len(df_modern)} adet Türkiye depremi '{FILE_NAME}' dosyasına kaydedildi.")
+    else:
+        print("\nHiç veri bulunamadı!")
+        
+    return df_modern
 
 if __name__ == "__main__":
-    if not os.path.exists(FILE_NAME):
-        build_initial_dataset()
-    else:
-        find_and_fill_gaps(FILE_NAME)
+    build_turkey_dataset()

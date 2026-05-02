@@ -17,3 +17,21 @@ uvenv/
 __pycache__/
 *.py[cod]
 *$py.class
+
+# Log Dosyaları
+*.log
+
+# Veritabanı Dosyaları
+*.sqlite3
+
+# Medya Dosyaları
+media/
+
+# Statik Dosyalar
+static/
+
+# Diğer Geçici Dosyalar
+*.bak
+*.tmp
+*.swp
+deneme/

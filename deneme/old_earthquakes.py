@@ -38,3 +38,6 @@ print("\nBirleştirilmiş verisetinin son 5 satırı:")
 print(combined_df.tail())
 print("\nBirleştirilmiş verisetinin temel bilgileri:")
 combined_df.info()
+
+if __name__ == "__main__":
+    print("Eski depremler ve USGS verisi başarıyla birleştirildi ve kaydedildi.")
