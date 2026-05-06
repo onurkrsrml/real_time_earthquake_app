@@ -1,6 +1,7 @@
-ef get_seismic_risk_score(latitude, longitude, time):
+import requests
+    def get_seismic_risk_score(latitude, longitude, time):
     """
-    RABİA - Sismik Risk Modeli Girdi Formatı
+    RABİA AŞIK - Sismik Risk Modeli Girdi Formatı
     Girdiler: 
     - latitude: float (Örn: 37.5)
     - longitude: float (Örn: 38.4)
