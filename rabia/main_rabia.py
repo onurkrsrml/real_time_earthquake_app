@@ -2,7 +2,7 @@ import requests
 
 def get_seismic_risk_score(lat, lon, date):
     """
-    Bu fonksiyon Rabia'nın gizli modeline (API) bağlanır.
+    Bu fonksiyon Rabia'nın modeline (API) bağlanır.
     Sadece koordinatları gönderir ve risk skorunu alır.
     """
     # Buradaki URL'yi bir sonraki aşamada oluşturacağız
