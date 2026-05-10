@@ -185,14 +185,13 @@ import re
 import numpy as np
 import seaborn as sns
 import json
+import optuna
 from matplotlib import pyplot as plt
-import missingno as msno
 from datetime import date
-from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score, confusion_matrix, classification_report
 from sklearn.model_selection import TimeSeriesSplit, GridSearchCV
 from sklearn.ensemble import RandomForestRegressor
-from sklearn.neighbors import LocalOutlierFactor
-from sklearn.preprocessing import MinMaxScaler, LabelEncoder, StandardScaler, RobustScaler
+from sklearn.preprocessing import StandardScaler
 import warnings
 
 
@@ -534,7 +533,7 @@ for train_index, test_index in tscv.split(X):
     y_train, y_test = y_mag.iloc[train_index], y_mag.iloc[test_index]
     model_mag.fit(X_train, y_train)
     preds = model_mag.predict(X_test)
-    print(f"MAE (Magnitude): {mean_absolute_error(y_test, preds):.3f} | RMSE: {np.sqrt(mean_squared_error(y_test, preds)):.3f}")
+    print(f"(Magnitude) -> MAE: {mean_absolute_error(y_test, preds):.3f} | RMSE: {np.sqrt(mean_squared_error(y_test, preds)):.3f}")
 
 print("\nEvaluating days_to_next_major_event Model...")
 for train_index, test_index in tscv.split(X):
@@ -542,7 +541,7 @@ for train_index, test_index in tscv.split(X):
     y_train, y_test = y_days.iloc[train_index], y_days.iloc[test_index]
     model_days.fit(X_train, y_train)
     preds = model_days.predict(X_test)
-    print(f"MAE (Days): {mean_absolute_error(y_test, preds):.3f} | RMSE: {np.sqrt(mean_squared_error(y_test, preds)):.3f}")
+    print(f"(Days) -> MAE: {mean_absolute_error(y_test, preds):.3f} | RMSE: {np.sqrt(mean_squared_error(y_test, preds)):.3f}")
 
 
 ########################################################################################################################
@@ -582,13 +581,68 @@ print("\n", "STEP 8 : HYPERPARAMETER OPTIMIZATION", "\n", "=" * 30, "\n")
 
 
 # Hyperparameter Optimization
-print("\n", "Hyperparameter Optimization", "\n", "_" * 30, "\n")
-rf_params = {"n_estimators": [100, 200, 500], "max_depth": [5, 10, 20, None]}
-grid_search_mag = GridSearchCV(model_mag, rf_params, cv=tscv, scoring='neg_mean_squared_error', n_jobs=-1).fit(X, y_mag)
-grid_search_days = GridSearchCV(model_days, rf_params, cv=tscv, scoring='neg_mean_squared_error', n_jobs=-1).fit(X, y_days)
+# print("\n", "Hyperparameter Optimization", "\n", "_" * 30, "\n")
+# rf_params = {"n_estimators": [100, 200, 500], "max_depth": [5, 10, 20, None]}
+# grid_search_mag = GridSearchCV(model_mag, rf_params, cv=tscv, scoring='neg_mean_squared_error', n_jobs=-1).fit(X, y_mag)
+# grid_search_days = GridSearchCV(model_days, rf_params, cv=tscv, scoring='neg_mean_squared_error', n_jobs=-1).fit(X, y_days)
+#
+# print(f"Best Params (Magnitude): {grid_search_mag.best_params_}")
+# print(f"Best Params (Days): {grid_search_days.best_params_}")
 
-print(f"Best Params (Magnitude): {grid_search_mag.best_params_}")
-print(f"Best Params (Days): {grid_search_days.best_params_}")
+
+# Optuna
+optuna.logging.set_verbosity(optuna.logging.WARNING)
+
+def objective_mag(trial):
+    # Denenecek hiperparametre aralıkları
+    n_estimators = trial.suggest_int('n_estimators', 100, 500, step=100)
+    max_depth = trial.suggest_categorical('max_depth', [5, 10, 20, None])
+    min_samples_split = trial.suggest_int('min_samples_split', 2, 10)
+
+    model = RandomForestRegressor(
+        n_estimators=n_estimators,
+        max_depth=max_depth,
+        min_samples_split=min_samples_split,
+        random_state=42,
+        n_jobs=-1)
+
+    mse_scores = []
+    for train_index, test_index in tscv.split(X):
+        X_train, X_test = X.iloc[train_index], X.iloc[test_index]
+        y_train, y_test = y_mag.iloc[train_index], y_mag.iloc[test_index]
+        model.fit(X_train, y_train)
+        preds = model.predict(X_test)
+        mse_scores.append(mean_squared_error(y_test, preds))
+    return np.mean(mse_scores)
+
+def objective_days(trial):
+    n_estimators = trial.suggest_int('n_estimators', 100, 500, step=100)
+    max_depth = trial.suggest_categorical('max_depth', [5, 10, 20, None])
+    min_samples_split = trial.suggest_int('min_samples_split', 2, 10)
+
+    model = RandomForestRegressor(
+        n_estimators=n_estimators,
+        max_depth=max_depth,
+        min_samples_split=min_samples_split,
+        random_state=42,
+        n_jobs=-1)
+
+    mse_scores = []
+    for train_index, test_index in tscv.split(X):
+        X_train, X_test = X.iloc[train_index], X.iloc[test_index]
+        y_train, y_test = y_days.iloc[train_index], y_days.iloc[test_index]
+        model.fit(X_train, y_train)
+        preds = model.predict(X_test)
+        mse_scores.append(mean_squared_error(y_test, preds))
+    return np.mean(mse_scores)
+
+study_mag = optuna.create_study(direction='minimize')
+study_mag.optimize(objective_mag, n_trials=100)
+print(f"Best Params (Magnitude): {study_mag.best_params}")
+
+study_days = optuna.create_study(direction='minimize')
+study_days.optimize(objective_days, n_trials=100)
+print(f"Best Params (Days): {study_days.best_params}")
 
 
 ########################################################################################################################
@@ -599,8 +653,10 @@ print("\n", "STEP 9 : FINAL MODEL", "\n", "=" * 30, "\n")
 
 # Final Models
 print("\n", "Final Models", "\n", "_" * 30, "\n")
-final_model_mag = grid_search_mag.best_estimator_
-final_model_days = grid_search_days.best_estimator_
+# final_model_mag = grid_search_mag.best_estimator_
+# final_model_days = grid_search_days.best_estimator_
+final_model_mag = RandomForestRegressor(**study_mag.best_params, random_state=42, n_jobs=-1)
+final_model_days = RandomForestRegressor(**study_days.best_params, random_state=42, n_jobs=-1)
 
 final_model_mag.fit(X, y_mag)
 final_model_days.fit(X, y_days)
