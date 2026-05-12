@@ -791,6 +791,8 @@ def main():
     save_model_metadata("onur/OUTPUTS_onur.json")
     save_predictions_table("onur/predictions_table_onur.csv")
 
+    return final_json
+
 
 # Run Function
 print("\n", "Run Function", "\n", "_" * 30, "\n")
