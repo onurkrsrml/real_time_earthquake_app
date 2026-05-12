@@ -662,8 +662,8 @@ final_model_days = RandomForestRegressor(**study_days.best_params, random_state=
 final_model_mag.fit(X, y_mag)
 final_model_days.fit(X, y_days)
 
-joblib.dump(final_model_days, 'model_deepfault_days.pkl')
-joblib.dump(final_model_mag, 'model_deepfault_mag.pkl')
+joblib.dump(final_model_days, 'onur/model_deepfault_days.pkl')
+joblib.dump(final_model_mag, 'onur/model_deepfault_mag.pkl')
 
 print("Final Models have been trained with walk-forward validated hyperparameters.")
 
@@ -778,8 +778,12 @@ def main():
     print(final_json)
     print("\n------------------------------------------")
 
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    output_file_path = os.path.join(script_dir, "prediction_output.json")
+    try:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+    except NameError:
+        script_dir = os.getcwd()
+    
+    output_file_path = os.path.join(script_dir, "onur/prediction_output.json")
     
     with open(output_file_path, "w") as f:
         f.write(final_json)
