@@ -12,7 +12,6 @@ def days_to_urgency_score(days):
     else: return 0.15
 
 def calculate_consistency(risk_score, magnitude_score, urgency_score, confidence_score):
-    
     diff_1 = abs(risk_score - magnitude_score)
     diff_2 = abs(risk_score - urgency_score)
     
@@ -34,15 +33,26 @@ def consistency_engine(combined_data):
     
     cons_score = calculate_consistency(risk, m_score, u_score, conf)
 
-    # Mantıksal Kurallar
-    status = "Normal"
+    # --- GÜNCELLENMİŞ MANTIKSAL KURALLAR ---
     is_consistent = True
-    if risk > 0.70 and mag < 4.0:
+    status = "Bilinmiyor"
+
+    # 1. Önce matematiğe (cons_score) güvenelim (Ana Filtre)
+    if cons_score < 0.40:
+        is_consistent = False
+        status = "Kritik Çelişki (Tutarlılık Skoru Çok Düşük)"
+    elif cons_score < 0.65:
         status = "Orta/Düşük Tutarlılık"
-    elif risk > 0.70 and days <= 7:
+    else:
         status = "Yüksek Tutarlılık"
-    elif risk < 0.40 and mag > 5.5:
-        status = "Model Çelişkisi Var"
+
+    # 2. Senin özel iş kurallarını (Edge Cases) ekleyelim
+    # (Bu kurallar matematiğin yakalayamadığı zıtlıkları ezer)
+    if risk > 0.70 and mag < 4.0:
+        status = "Model Çelişkisi: Yüksek Risk ama Düşük Şiddet Tahmini"
+        is_consistent = False
+    elif risk < 0.40 and mag >= 5.0: # Sınırı 5.5'ten 5.0'a çektik
+        status = "Model Çelişkisi: Düşük Risk ama Yüksek Şiddet Tahmini"
         is_consistent = False
 
     # Paketleme

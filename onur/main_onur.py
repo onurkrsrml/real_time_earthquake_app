@@ -719,6 +719,8 @@ def main():
     print(final_json)
     print("\n------------------------------------------")
 
+    return final_json
+
 
 # Run Function
 print("\n", "Run Function", "\n", "_" * 30, "\n")
