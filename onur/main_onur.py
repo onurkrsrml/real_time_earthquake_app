@@ -181,13 +181,15 @@ print("\n", "STEP 1 : EDA", "\n", "=" * 30, "\n")
 # Import Libraries
 print("\n", "Import Libraries", "\n", "_" * 30, "\n")
 import pandas as pd
-import re
 import numpy as np
-import seaborn as sns
+import os
 import json
-import optuna
-from matplotlib import pyplot as plt
+import re
+import joblib
 from datetime import date
+import optuna
+import seaborn as sns
+from matplotlib import pyplot as plt
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score, confusion_matrix, classification_report
 from sklearn.model_selection import TimeSeriesSplit, GridSearchCV
 from sklearn.ensemble import RandomForestRegressor
@@ -594,7 +596,6 @@ print("\n", "STEP 8 : HYPERPARAMETER OPTIMIZATION", "\n", "=" * 30, "\n")
 optuna.logging.set_verbosity(optuna.logging.WARNING)
 
 def objective_mag(trial):
-    # Denenecek hiperparametre aralıkları
     n_estimators = trial.suggest_int('n_estimators', 100, 500, step=100)
     max_depth = trial.suggest_categorical('max_depth', [5, 10, 20, None])
     min_samples_split = trial.suggest_int('min_samples_split', 2, 10)
@@ -637,11 +638,11 @@ def objective_days(trial):
     return np.mean(mse_scores)
 
 study_mag = optuna.create_study(direction='minimize')
-study_mag.optimize(objective_mag, n_trials=100)
+study_mag.optimize(objective_mag, n_trials=30)
 print(f"Best Params (Magnitude): {study_mag.best_params}")
 
 study_days = optuna.create_study(direction='minimize')
-study_days.optimize(objective_days, n_trials=100)
+study_days.optimize(objective_days, n_trials=30)
 print(f"Best Params (Days): {study_days.best_params}")
 
 
@@ -660,6 +661,9 @@ final_model_days = RandomForestRegressor(**study_days.best_params, random_state=
 
 final_model_mag.fit(X, y_mag)
 final_model_days.fit(X, y_days)
+
+joblib.dump(final_model_days, 'model_deepfault_days.pkl')
+joblib.dump(final_model_mag, 'model_deepfault_mag.pkl')
 
 print("Final Models have been trained with walk-forward validated hyperparameters.")
 
@@ -701,6 +705,61 @@ def generate_prediction_json(region_id, current_features):
     return json.dumps(output, indent=4)
 
 
+def evaluate_cv_metrics(model_params, X, y, splitter):
+    mae_scores, rmse_scores = [], []
+    for train_index, test_index in splitter.split(X):
+        model = RandomForestRegressor(**model_params, random_state=42, n_jobs=-1)
+        model.fit(X.iloc[train_index], y.iloc[train_index])
+        preds = model.predict(X.iloc[test_index])
+        mae_scores.append(mean_absolute_error(y.iloc[test_index], preds))
+        rmse_scores.append(np.sqrt(mean_squared_error(y.iloc[test_index], preds)))
+    return {
+        "mae": float(np.mean(mae_scores)),
+        "rmse": float(np.mean(rmse_scores))
+    }
+
+def save_model_metadata(output_path="onur/OUTPUTS_onur.json"):
+    metrics_mag = evaluate_cv_metrics(study_mag.best_params, X, y_mag, tscv)
+    metrics_days = evaluate_cv_metrics(study_days.best_params, X, y_days, tscv)
+
+    metadata = {
+        "generated_at": date.today().strftime("%Y-%m-%d"),
+        "model_version": "onur_regression_v1",
+        "dataset_path": "data/earthquakes_featured.csv",
+        "rows": int(df.shape[0]),
+        "feature_count": int(len(features)),
+        "features": list(features),
+        "targets": ["future_max_magnitude_7d", "days_to_next_major_event"],
+        "best_params": {
+            "future_max_magnitude_7d": study_mag.best_params,
+            "days_to_next_major_event": study_days.best_params
+        },
+        "cv_metrics": {
+            "future_max_magnitude_7d": metrics_mag,
+            "days_to_next_major_event": metrics_days
+        }
+    }
+
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(metadata, f, ensure_ascii=False, indent=4)
+
+    print(f"Model metadata saved to: {output_path}")
+
+def save_predictions_table(output_path="onur/predictions_table_onur.csv"):
+    preds_mag = final_model_mag.predict(X)
+    preds_days = final_model_days.predict(X)
+
+    base_cols = ["date", "region", "magnitude", "future_max_magnitude_7d", "days_to_next_major_event"]
+    existing_cols = [col for col in base_cols if col in df.columns]
+
+    result_df = df[existing_cols].copy()
+    result_df["pred_future_max_magnitude_7d"] = preds_mag
+    result_df["pred_days_to_next_major_event"] = preds_days
+
+    result_df.to_csv(output_path, index=False)
+    print(f"Prediction table saved to: {output_path}")
+
+
 ########################################################################################################################
 # STEP 11 : MAIN FUNCTION (EXECUTION)
 ########################################################################################################################
@@ -715,9 +774,18 @@ def main():
 
     final_json = generate_prediction_json(region_id=target_region, current_features=latest_record)
 
-    print("\n---------- OUTPUT (JSON) ----------\n")
+    print("\n-------------- OUTPUT (JSON) -------------\n")
     print(final_json)
     print("\n------------------------------------------")
+
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    output_file_path = os.path.join(script_dir, "prediction_output.json")
+    
+    with open(output_file_path, "w") as f:
+        f.write(final_json)
+
+    save_model_metadata("onur/OUTPUTS_onur.json")
+    save_predictions_table("onur/predictions_table_onur.csv")
 
 
 # Run Function
