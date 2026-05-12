@@ -15,6 +15,6 @@ if __name__ == "__main__":
     import test_cases
     
     # Hangi senaryoyu test etmek istiyorsan onu buraya yaz:
-    result = run_pipeline(test_cases.rabia_test_2, test_cases.onur_test_2)
+    result = run_pipeline(test_cases.rabia_test_1, test_cases.onur_test_1)
     
     print(json.dumps(result, indent=4, ensure_ascii=False))
