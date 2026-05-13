@@ -213,7 +213,7 @@ warnings.simplefilter(action="ignore")
 # Load Df
 print("\n", "Load Df", "\n", "_" * 30, "\n")
 def load_df():
-    data = pd.read_csv("data/earthquakes_featured.csv", low_memory=False)
+    data = pd.read_csv("../data/earthquakes_featured.csv", low_memory=False)
     return data
 df = load_df()
 
@@ -515,6 +515,7 @@ X = df[features]
 y_mag = df['future_max_magnitude_7d']
 y_days = df['days_to_next_major_event']
 
+X.fillna(0, inplace=True)
 
 # Walk-Forward Validation (TimeSeriesSplit)
 print("\n", "Walk-Forward Validation (TimeSeriesSplit)", "\n", "_" * 30, "\n")
@@ -662,8 +663,8 @@ final_model_days = RandomForestRegressor(**study_days.best_params, random_state=
 final_model_mag.fit(X, y_mag)
 final_model_days.fit(X, y_days)
 
-joblib.dump(final_model_days, 'onur/model_deepfault_days.pkl')
-joblib.dump(final_model_mag, 'onur/model_deepfault_mag.pkl')
+joblib.dump(final_model_days, '../onur/model_deepfault_days.pkl')
+joblib.dump(final_model_mag, '../onur/model_deepfault_mag.pkl')
 
 print("Final Models have been trained with walk-forward validated hyperparameters.")
 
@@ -783,13 +784,18 @@ def main():
     except NameError:
         script_dir = os.getcwd()
     
-    output_file_path = os.path.join(script_dir, "onur/prediction_output.json")
+    output_file_path = os.path.join(script_dir, "../onur/prediction_output.json")
     
     with open(output_file_path, "w") as f:
         f.write(final_json)
 
-    save_model_metadata("onur/OUTPUTS_onur.json")
-    save_predictions_table("onur/predictions_table_onur.csv")
+    save_model_metadata("../onur/OUTPUTS_onur.json")
+    save_predictions_table("../onur/predictions_table_onur.csv")
+
+    X_save = X.copy()
+    X_save['region'] = df['region'] # Bölgeye göre filtrelemek için ekliyoruz
+    processed_path = os.path.join(script_dir, "processed_features.csv")
+    X_save.to_csv(processed_path, index=False)
 
     return final_json
 
@@ -800,5 +806,3 @@ if __name__ == "__main__":
     main()
 
 print("\n", "-" * 50, "PROJECT FINISHED", "-" * 50, "\n")
-
-

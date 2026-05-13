@@ -1,5 +1,5 @@
 import requests
-    def get_seismic_risk_score(latitude, longitude, time):
+def get_seismic_risk_score(latitude, longitude, time):
     """
     RABİA AŞIK - Sismik Risk Modeli Girdi Formatı
     Girdiler: 

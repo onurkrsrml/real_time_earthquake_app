@@ -1,5 +1,5 @@
 {
-    "generated_at": "2026-05-12",
+    "generated_at": "2026-05-13",
     "model_version": "onur_regression_v1",
     "dataset_path": "data/earthquakes_featured.csv",
     "rows": 32833,
@@ -134,17 +134,17 @@
         "days_to_next_major_event": {
             "n_estimators": 100,
             "max_depth": 5,
-            "min_samples_split": 4
+            "min_samples_split": 7
         }
     },
     "cv_metrics": {
         "future_max_magnitude_7d": {
-            "mae": 0.9473827054665851,
-            "rmse": 1.297495214141993
+            "mae": 0.9531867779003494,
+            "rmse": 1.301019047886933
         },
         "days_to_next_major_event": {
-            "mae": 21.572550339980218,
-            "rmse": 34.58869661358947
+            "mae": 21.513277834495533,
+            "rmse": 34.25978779818141
         }
     }
 }
