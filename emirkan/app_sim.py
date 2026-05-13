@@ -4,6 +4,8 @@ import pandas as pd
 import numpy as np
 import joblib
 import streamlit as st
+import plotly.express as px
+import plotly.graph_objects as go
 
 # --- 1. KLASÖR (PATH) AYARI ---
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -68,6 +70,41 @@ with sim_col2:
     selected_mag = st.slider("📈 Gözlemlenen Öncü Şiddet", 1.0, 9.0, 4.5, step=0.1)
 with sim_col3:
     selected_depth = st.slider("🌍 Derinlik (km)", 1.0, 100.0, 10.0, step=0.5)
+
+# --- 5.5 DİNAMİK FAY HARİTASI VE ETKİ ALANI ŞOVU ---
+st.markdown("### 🗺️ Bölgesel Etki ve Risk Haritası")
+# Bölgelerin ortalama koordinatları (Jürilik şov kısmı)
+koordinatlar = {
+    "KAF": {"lat": 40.8, "lon": 33.0, "name": "Kuzey Anadolu Fayı"},
+    "DAF": {"lat": 38.2, "lon": 38.8, "name": "Doğu Anadolu Fayı"},
+    "BAF": {"lat": 38.5, "lon": 28.0, "name": "Batı Anadolu Fayı"},
+    "Marmara": {"lat": 40.7, "lon": 28.5, "name": "Marmara Bölgesi"},
+    "Ege": {"lat": 38.0, "lon": 26.0, "name": "Ege Bölgesi"}
+}
+
+# Seçilen bölgenin koordinatını al (Yoksayılan olarak Ankara civarı)
+curr_lat = koordinatlar.get(selected_region, {"lat": 39.0})["lat"]
+curr_lon = koordinatlar.get(selected_region, {"lon": 35.0})["lon"]
+bolge_adi = koordinatlar.get(selected_region, {"name": selected_region})["name"]
+
+# Haritayı oluştur (Şiddet arttıkça daire büyür ve kızarır)
+# Dairenin büyüklüğü şiddetin üstel (exponential) haliyle artar ki görsel etki vursun
+map_fig = px.scatter_mapbox(
+    lat=[curr_lat],
+    lon=[curr_lon],
+    size=[selected_mag ** 3],  
+    color=[selected_mag],
+    color_continuous_scale="Reds",
+    range_color=[1.0, 9.0],
+    hover_name=[f"Simülasyon Merkezi: {bolge_adi}"],
+    zoom=5.5,
+    mapbox_style="carto-darkmatter",
+    height=400
+)
+map_fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, coloraxis_showscale=False)
+st.plotly_chart(map_fig, use_container_width=True)
+st.info(f"📍 **{bolge_adi}** üzerinde {selected_mag} büyüklüğünde ve {selected_depth} km derinliğinde bir senaryo simüle ediliyor.")
+
 
 # --- 6. YAPAY ZEKA CANLI TAHMİN (INFERENCE) MOTORU ---
 # Seçilen bölgenin en son tarihli verisini (satırını) buluyoruz
@@ -193,3 +230,56 @@ with st.expander("🔍 Motorlara Giden Arka Plan Verileri (Tıklayın)"):
     with col_det2:
         st.warning("⏱️ Onur'un Çıktısı (.pkl Canlı Inference)")
         st.json(onur_in)
+
+# --- 10. SUNUM İÇİN BİLİMSEL GRAFİKLER ---
+st.markdown("---")
+st.markdown("### 📊 Sismik Analiz ve Proje Mantığı")
+
+grafik_col1, grafik_col2 = st.columns(2)
+
+with grafik_col1:
+    st.markdown("**1. Tarihsel Deprem Dağılımı (Seçilen Bölge)**")
+    st.markdown("Yapay zekanın bu bölgedeki geçmiş depremlerin derinlik ve şiddet korelasyonunu nasıl okuduğunu gösterir.")
+    # Sadece o bölgenin geçmiş verilerini çiziyoruz
+    if not region_data.empty and "magnitude" in region_data.columns and "depth" in region_data.columns:
+        fig_scatter = px.scatter(
+            region_data, x="magnitude", y="depth", 
+            color="magnitude", color_continuous_scale="Viridis",
+            labels={"magnitude": "Şiddet (Mw)", "depth": "Derinlik (km)"},
+            title=f"{selected_region} Bölgesi Geçmiş Veri Kümesi"
+        )
+        fig_scatter.update_layout(yaxis_autorange="reversed") # Derinlik aşağı doğru artar
+        # Simüle edilen noktayı Kırmızı X olarak ekliyoruz (Çok havalı sunum detayı)
+        fig_scatter.add_scatter(x=[selected_mag], y=[selected_depth], mode='markers', 
+                                marker=dict(size=15, color='red', symbol='x'), name='CANLI SİMÜLASYON')
+        st.plotly_chart(fig_scatter, use_container_width=True)
+    else:
+        st.warning("Bu bölge için yeterli tarihsel veri bulunamadı.")
+
+with grafik_col2:
+    st.markdown("**2. Tutarlılık Motoru (Radar Analizi)**")
+    st.markdown("Karar destek sistemimizin riski belirlerken hangi parametrelere ne kadar ağırlık verdiğinin canlı haritası.")
+    
+    # Radar Grafiği için verileri 0-1 arasına normalize ediyoruz (Görsel şov)
+    categories = ['Sismik Enerji\n(Magnitude)', 'Yüzey Etkisi\n(Sığlık)', 'AI Güven Skoru', 'Rabia Risk Skoru', 'Final Karar Skoru']
+    
+    # Değerler
+    mag_norm = selected_mag / 10.0
+    depth_norm = max(0, 1 - (selected_depth / 100.0)) # Sığ ise 1'e yakın olur
+    
+    values = [mag_norm, depth_norm, simulated_confidence, rabia_risk, calculated_final_score]
+    
+    fig_radar = go.Figure(data=go.Scatterpolar(
+      r=values,
+      theta=categories,
+      fill='toself',
+      line_color='darkorange'
+    ))
+    fig_radar.update_layout(
+      polar=dict(
+        radialaxis=dict(visible=True, range=[0, 1])
+      ),
+      showlegend=False,
+      title="Anlık Karar Karakteristiği"
+    )
+    st.plotly_chart(fig_radar, use_container_width=True)
