@@ -174,6 +174,16 @@ def format_delta(value):
         return "-"
     return f"{value:+.2f}" if isinstance(value, (int, float, np.number)) else str(value)
 
+
+def risk_level(score: float):
+    if score is None or pd.isna(score):
+        return "Bilinmiyor", "⚪", "#6b7280"
+    if score >= 70:
+        return "Yüksek", "🔴", "#ef4444"
+    if score >= 40:
+        return "Orta", "🟠", "#f97316"
+    return "Düşük", "🟢", "#22c55e"
+
 # ------------------------------------------------------------
 # DATA LOADING
 # ------------------------------------------------------------
@@ -366,9 +376,10 @@ with analysis_tab:
                 (w_conf * norm_conf)
             ) / weight_sum
             risk_score = float(risk * 100)
+            label, icon, color = risk_level(risk_score)
 
             st.markdown(
-                f"**Risk Skoru:** <span class='accent'>{risk_score:.1f}/100</span>",
+                f"**Risk Skoru:** <span class='accent'>{risk_score:.1f}/100</span> — {icon} **{label}**",
                 unsafe_allow_html=True
             )
             st.progress(min(int(risk_score), 100), text="Risk seviyesi")
@@ -379,6 +390,7 @@ with analysis_tab:
                 "pred_days": float(pred_days),
                 "confidence": None if pd.isna(confidence) else float(confidence),
                 "risk_score": risk_score,
+                "risk_level": label,
                 "mag_threshold_mid": mag_threshold_mid,
                 "mag_threshold_high": mag_threshold_high,
                 "short_days": short_days,
@@ -434,6 +446,36 @@ with analysis_tab:
         )
     else:
         st.info("Eşik paneli için predictions_table_onur.csv bulunamadı.")
+
+    # ------------------------------------------------------------
+    # RISK SCORE TIME SERIES + LOG FILTERS
+    # ------------------------------------------------------------
+    st.subheader("📈 Risk Skoru Zaman Serisi")
+    if not risk_log_df.empty:
+        log_df = risk_log_df.copy()
+        log_df["timestamp"] = pd.to_datetime(log_df["timestamp"], errors="coerce")
+
+        with st.expander("🔍 Risk Log Filtreleri"):
+            min_date = log_df["timestamp"].min().date() if log_df["timestamp"].notna().any() else datetime.utcnow().date()
+            max_date = log_df["timestamp"].max().date() if log_df["timestamp"].notna().any() else datetime.utcnow().date()
+            date_range = st.date_input("Tarih Aralığı", [min_date, max_date])
+            score_min, score_max = st.slider("Risk Skoru Aralığı", 0, 100, (0, 100))
+            level_options = ["Tümü", "Düşük", "Orta", "Yüksek"]
+            selected_level = st.selectbox("Risk Seviyesi", level_options)
+
+        if len(date_range) == 2:
+            log_df = log_df[(log_df["timestamp"].dt.date >= date_range[0]) & (log_df["timestamp"].dt.date <= date_range[1])]
+        log_df = log_df[(log_df["risk_score"] >= score_min) & (log_df["risk_score"] <= score_max)]
+        if selected_level != "Tümü" and "risk_level" in log_df.columns:
+            log_df = log_df[log_df["risk_level"] == selected_level]
+
+        if not log_df.empty:
+            st.line_chart(log_df.set_index("timestamp")["risk_score"])
+            st.dataframe(log_df.tail(50))
+        else:
+            st.info("Seçili filtrelerle risk logu bulunamadı.")
+    else:
+        st.info("Henüz risk logu bulunamadı. Önce 'Risk Kaydını Logla' kullan.")
 
     # ------------------------------------------------------------
     # FEATURE IMPORTANCE (SHAP benzeri)
