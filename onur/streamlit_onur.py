@@ -5,6 +5,7 @@ import json
 import pydeck as pdk
 import joblib
 import os
+import requests
 from datetime import datetime
 
 # ------------------------------------------------------------
@@ -96,6 +97,8 @@ META_PATH = "onur/OUTPUTS_onur.json"
 MODEL_DAYS_PATH = "onur/model_deepfault_days.pkl"
 MODEL_MAG_PATH = "onur/model_deepfault_mag.pkl"
 RISK_LOG_PATH = "onur/risk_log.csv"
+AGENT_LOG_PATH = "onur/n8n_agent_payloads.jsonl"
+WEBHOOK_URL = "http://localhost:5678/webhook-test/https://miuul-final-project-fraud-detection.streamlit.app/"
 
 CORE_FEATURES = [
     "magnitude",
@@ -184,6 +187,25 @@ def risk_level(score: float):
         return "Orta", "🟠", "#f97316"
     return "Düşük", "🟢", "#22c55e"
 
+
+def compute_risk_score(pred_mag, pred_days, confidence, w_mag, w_days, w_conf, mag_scale, days_scale):
+    if pd.isna(pred_mag) or pd.isna(pred_days):
+        return None
+    norm_mag = min(pred_mag / mag_scale, 1.0)
+    norm_days = 1.0 - min(pred_days / days_scale, 1.0)
+    norm_conf = 0.0 if pd.isna(confidence) else min(confidence, 1.0)
+    weight_sum = max(w_mag + w_days + w_conf, 1e-6)
+    risk = ((w_mag * norm_mag) + (w_days * norm_days) + (w_conf * norm_conf)) / weight_sum
+    return float(risk * 100)
+
+
+def send_webhook(payload):
+    try:
+        response = requests.post(WEBHOOK_URL, json=payload, timeout=15)
+        return response.status_code, response.text
+    except Exception as exc:
+        return None, str(exc)
+
 # ------------------------------------------------------------
 # DATA LOADING
 # ------------------------------------------------------------
@@ -233,7 +255,9 @@ w_conf = st.sidebar.slider("Confidence Ağırlığı", 0.0, 1.0, 0.2, 0.05)
 mag_scale = st.sidebar.slider("Magnitude Ölçek (Normalizasyon)", 5.0, 8.0, 7.0, 0.1)
 days_scale = st.sidebar.slider("Gün Ölçek (Normalizasyon)", 7, 90, 30)
 
-weight_sum = max(w_mag + w_days + w_conf, 1e-6)
+st.sidebar.header("📡 Otomatik Uyarı")
+alert_enabled = st.sidebar.checkbox("Webhook uyarılarını etkinleştir", value=False)
+alert_min_level = st.sidebar.selectbox("Minimum seviye", ["Düşük", "Orta", "Yüksek"], index=1)
 
 # ------------------------------------------------------------
 # PRESENTATION MODE
@@ -365,17 +389,8 @@ with analysis_tab:
         # RISK SCORE
         # ------------------------------------------------------------
         st.subheader("🧮 Risk Skoru")
-        if not pd.isna(pred_mag) and not pd.isna(pred_days):
-            norm_mag = min(pred_mag / mag_scale, 1.0)
-            norm_days = 1.0 - min(pred_days / days_scale, 1.0)
-            norm_conf = 0.0 if pd.isna(confidence) else min(confidence, 1.0)
-
-            risk = (
-                (w_mag * norm_mag) +
-                (w_days * norm_days) +
-                (w_conf * norm_conf)
-            ) / weight_sum
-            risk_score = float(risk * 100)
+        risk_score = compute_risk_score(pred_mag, pred_days, confidence, w_mag, w_days, w_conf, mag_scale, days_scale)
+        if risk_score is not None:
             label, icon, color = risk_level(risk_score)
 
             st.markdown(
@@ -398,6 +413,17 @@ with analysis_tab:
                 "weights": {"mag": w_mag, "days": w_days, "conf": w_conf},
                 "scales": {"mag_scale": mag_scale, "days_scale": days_scale},
             }
+
+            # Webhook alert
+            if alert_enabled:
+                levels = {"Düşük": 1, "Orta": 2, "Yüksek": 3}
+                if levels.get(label, 0) >= levels.get(alert_min_level, 2):
+                    if st.button("🚨 Webhook Uyarısı Gönder"):
+                        status, text = send_webhook({"type": "risk_alert", **risk_payload})
+                        if status and 200 <= status < 300:
+                            st.success("Webhook uyarısı gönderildi.")
+                        else:
+                            st.error(f"Webhook gönderilemedi: {text}")
         else:
             st.info("Risk skoru için gerekli tahminler bulunamadı.")
 
@@ -669,7 +695,46 @@ with scenario_tab:
                 col2.metric("Sonraki Büyük Olay (gün)", f"{pred_days:.1f}")
                 col3.metric("Confidence Skoru", f"{confidence:.2f}")
 
+                scenario_risk = compute_risk_score(pred_mag, pred_days, confidence, w_mag, w_days, w_conf, mag_scale, days_scale)
+                if scenario_risk is not None:
+                    label, icon, _ = risk_level(scenario_risk)
+                    st.markdown(
+                        f"**Senaryo Risk Skoru:** <span class='accent'>{scenario_risk:.1f}/100</span> — {icon} **{label}**",
+                        unsafe_allow_html=True
+                    )
+
                 st.markdown("**Not:** Büyük olay eşiği = 4.0. Tahmin edilen gün sayısı bunun üstündeki olaya göre hesaplanır.")
+
+                # Agent payload + send button
+                st.markdown("### 🤖 Agent'a Gönder")
+                region_value = updated_row.get("region", updated_row.get("region id", "unknown"))
+                date_value = updated_row.get("date")
+                if isinstance(date_value, pd.Timestamp):
+                    date_value = date_value.strftime("%Y-%m-%d")
+
+                features_payload = {k: updated_row.get(k) for k in feature_list if k in updated_row}
+                agent_payload = {
+                    "region": region_value,
+                    "date": date_value,
+                    "pred_mag": pred_mag,
+                    "pred_days": pred_days,
+                    "confidence": confidence,
+                    "risk_score": scenario_risk,
+                    "features": features_payload,
+                }
+
+                if st.button("📤 Agent'a Gönder"):
+                    try:
+                        os.makedirs(os.path.dirname(AGENT_LOG_PATH), exist_ok=True)
+                        with open(AGENT_LOG_PATH, "a", encoding="utf-8") as f:
+                            f.write(json.dumps(agent_payload, ensure_ascii=False) + "\n")
+                        status, text = send_webhook({"type": "agent_payload", **agent_payload})
+                        if status and 200 <= status < 300:
+                            st.success("Agent payload gönderildi.")
+                        else:
+                            st.error(f"Webhook gönderilemedi: {text}")
+                    except Exception as exc:
+                        st.error(f"Agent payload kaydedilemedi: {exc}")
             else:
                 st.warning("Model dosyaları veya metadata eksik. Tahmin yapılamıyor.")
 
