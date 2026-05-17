@@ -98,9 +98,9 @@ MODEL_DAYS_PATH = "onur/model_deepfault_days.pkl"
 MODEL_MAG_PATH = "onur/model_deepfault_mag.pkl"
 RISK_LOG_PATH = "onur/risk_log.csv"
 AGENT_LOG_PATH = "onur/n8n_agent_payloads.jsonl"
-DEFAULT_WEBHOOK_URL = "http://localhost:5678/webhook-test/https://miuul-final-project-fraud-detection.streamlit.app/"
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
+DEFAULT_WEBHOOK_URL = "http://localhost:5678/webhook-test/https://realtimeearthquakeapp.streamlit.app/"
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "8830038595:AAHPBgpRmp_-_MqiPQeYgGQDX4kJngWKgy4")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "8830038595")
 
 CORE_FEATURES = [
     "magnitude",
