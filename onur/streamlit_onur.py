@@ -219,6 +219,26 @@ def send_telegram_message(token: str, chat_id: str, message: str):
     except Exception as exc:
         return None, str(exc)
 
+
+def build_test_earthquake_message():
+    fake_event = {
+        "region": "KAF",
+        "date": datetime.utcnow().strftime("%Y-%m-%d"),
+        "pred_mag": 5.6,
+        "pred_days": 3.2,
+        "confidence": 0.77,
+        "risk_score": 82.5,
+    }
+    return (
+        "🧪 TEST DEPREM MESAJI\n"
+        f"Bölge: {fake_event['region']}\n"
+        f"Tarih: {fake_event['date']}\n"
+        f"Tahmini Max Mag: {fake_event['pred_mag']}\n"
+        f"Tahmini Gün: {fake_event['pred_days']}\n"
+        f"Confidence: {fake_event['confidence']}\n"
+        f"Risk Skoru: {fake_event['risk_score']}"
+    )
+
 # ------------------------------------------------------------
 # DATA LOADING
 # ------------------------------------------------------------
@@ -277,6 +297,14 @@ show_webhook_details = st.sidebar.checkbox("Webhook cevabını göster", value=T
 st.sidebar.header("📨 Telegram")
 telegram_enabled = st.sidebar.checkbox("Telegram bildirimi", value=False)
 telegram_chat_id = st.sidebar.text_input("Telegram Chat ID", value=TELEGRAM_CHAT_ID)
+if st.sidebar.button("🧪 Telegram Test Mesajı Gönder"):
+    message = build_test_earthquake_message()
+    status, text = send_telegram_message(TELEGRAM_BOT_TOKEN, telegram_chat_id, message)
+    st.session_state["telegram_test_response"] = {"status": status, "text": text, "message": message}
+    if status and 200 <= status < 300:
+        st.sidebar.success("Telegram test mesajı gönderildi.")
+    else:
+        st.sidebar.error(f"Telegram test gönderilemedi: {text}")
 
 # ------------------------------------------------------------
 # PRESENTATION MODE
@@ -470,6 +498,9 @@ with analysis_tab:
         if "telegram_response" in st.session_state:
             with st.expander("🔎 Telegram Yanıtı Detayı"):
                 st.json(st.session_state["telegram_response"])
+        if "telegram_test_response" in st.session_state:
+            with st.expander("🔎 Telegram Test Yanıtı Detayı"):
+                st.json(st.session_state["telegram_test_response"])
 
         # ------------------------------------------------------------
         # RISK LOGGING + EXPORT
