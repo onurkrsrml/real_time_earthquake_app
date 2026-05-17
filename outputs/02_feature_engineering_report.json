@@ -1,0 +1,25 @@
+{
+  "featured_shape": [
+    273663,
+    114
+  ],
+  "target_rate": 0.11111841936980885,
+  "target_counts": {
+    "0": 243254,
+    "1": 30409
+  },
+  "date_min": "1990-01-31 00:00:00",
+  "date_max": "2026-03-18 00:00:00",
+  "leakage_today_cols_not_used_as_features": [
+    "event_count",
+    "strong_event_count",
+    "has_event_today",
+    "has_strong_event_today",
+    "max_magnitude",
+    "mean_magnitude",
+    "std_magnitude",
+    "mean_depth_km",
+    "min_depth_km"
+  ],
+  "note": "All rolling/lag features use shift(1), so today's earthquake information is not used for today's risk prediction."
+}

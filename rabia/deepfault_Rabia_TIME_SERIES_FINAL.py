@@ -560,77 +560,77 @@ def add_exogenous_features(df: pd.DataFrame) -> pd.DataFrame:
 def engineer_time_series(panel: pd.DataFrame, cfg: Config, out: Path) -> pd.DataFrame:
     print_section("3) LEAKAGE-SAFE TARGET + TIME SERIES FEATURE ENGINEERING")
 
+    # Veriyi sıralıyoruz ki groupby işlemleri kronolojik olarak hatasız çalışsın
     df = panel.copy().sort_values(["cell_id", "date"]).reset_index(drop=True)
     df = add_calendar_features(df)
 
-    pieces = []
-    for cell_id, g in df.groupby("cell_id", sort=False):
-        g = g.copy().sort_values("date")
+    # Vektörizasyon için temel groupby objemiz (for döngüsü yok!)
+    gb = df.groupby("cell_id")
 
-        # Target: future 7 days strong event, excluding today.
-        g["target_future_7d_m4"] = future_horizon_target(g["has_strong_event_today"], cfg.horizon_days)
-        g["is_label_known"] = True
-        if len(g) > cfg.horizon_days:
-            g.loc[g.index[-cfg.horizon_days:], "is_label_known"] = False
+    # Target: future 7 days strong event, excluding today.
+    df["target_future_7d_m4"] = gb["has_strong_event_today"].transform(lambda x: future_horizon_target(x, cfg.horizon_days))
+    
+    # is_label_known: Her grubun son 'horizon_days' kadar gününü False yapıyoruz
+    df["is_label_known"] = True
+    tail_mask = gb.cumcount(ascending=False) < cfg.horizon_days
+    df.loc[tail_mask, "is_label_known"] = False
 
-        # Strict past-only seismic features.
-        past_event = g["event_count"].shift(1)
-        past_strong = g["strong_event_count"].shift(1)
-        past_max_mag = g["max_magnitude"].shift(1)
-        past_mean_mag = g["mean_magnitude"].shift(1)
-        past_depth = g["mean_depth_km"].shift(1)
-        past_energy = (1.5 * g["max_magnitude"].fillna(0) + 4.8).where(g["has_event_today"] == 1, 0).shift(1)
+    # Strict past-only seismic features (Tüm shift işlemleri vektörel)
+    df["past_event"] = gb["event_count"].shift(1)
+    df["past_strong"] = gb["strong_event_count"].shift(1)
+    df["past_max_mag"] = gb["max_magnitude"].shift(1)
+    df["past_mean_mag"] = gb["mean_magnitude"].shift(1)
+    df["past_depth"] = gb["mean_depth_km"].shift(1)
+    
+    # past_energy
+    df["temp_energy"] = (1.5 * df["max_magnitude"].fillna(0) + 4.8).where(df["has_event_today"] == 1, 0)
+    df["past_energy"] = gb["temp_energy"].shift(1)
+    df.drop(columns=["temp_energy"], inplace=True)
 
-        for w in [1, 3, 7, 14, 30, 90, 180, 365]:
-            g[f"event_count_past_{w}d"] = past_event.rolling(w, min_periods=1).sum()
-            g[f"strong_count_past_{w}d"] = past_strong.rolling(w, min_periods=1).sum()
-            g[f"energy_log_sum_past_{w}d"] = past_energy.rolling(w, min_periods=1).sum()
+    # Rolling (Hareketli Pencere) hesaplamaları - transform ile RAM dostu
+    for w in [1, 3, 7, 14, 30, 90, 180, 365]:
+        df[f"event_count_past_{w}d"] = gb["past_event"].transform(lambda x: x.rolling(w, min_periods=1).sum())
+        df[f"strong_count_past_{w}d"] = gb["past_strong"].transform(lambda x: x.rolling(w, min_periods=1).sum())
+        df[f"energy_log_sum_past_{w}d"] = gb["past_energy"].transform(lambda x: x.rolling(w, min_periods=1).sum())
 
-        for w in [7, 30, 90, 180]:
-            g[f"max_mag_past_{w}d"] = past_max_mag.rolling(w, min_periods=1).max()
-            g[f"mean_mag_past_{w}d"] = past_mean_mag.rolling(w, min_periods=2).mean()
-            g[f"std_mag_past_{w}d"] = past_mean_mag.rolling(w, min_periods=3).std()
-            g[f"depth_mean_past_{w}d"] = past_depth.rolling(w, min_periods=2).mean()
+    for w in [7, 30, 90, 180]:
+        df[f"max_mag_past_{w}d"] = gb["past_max_mag"].transform(lambda x: x.rolling(w, min_periods=1).max())
+        df[f"mean_mag_past_{w}d"] = gb["past_mean_mag"].transform(lambda x: x.rolling(w, min_periods=2).mean())
+        df[f"std_mag_past_{w}d"] = gb["past_mean_mag"].transform(lambda x: x.rolling(w, min_periods=3).std())
+        df[f"depth_mean_past_{w}d"] = gb["past_depth"].transform(lambda x: x.rolling(w, min_periods=2).mean())
 
-        for lag in [1, 2, 3, 7, 14, 30]:
-            g[f"event_count_lag_{lag}d"] = g["event_count"].shift(lag)
-            g[f"strong_count_lag_{lag}d"] = g["strong_event_count"].shift(lag)
-            g[f"max_mag_lag_{lag}d"] = g["max_magnitude"].shift(lag)
+    # Lag (Gecikme) hesaplamaları
+    for lag in [1, 2, 3, 7, 14, 30]:
+        df[f"event_count_lag_{lag}d"] = gb["event_count"].shift(lag)
+        df[f"strong_count_lag_{lag}d"] = gb["strong_event_count"].shift(lag)
+        df[f"max_mag_lag_{lag}d"] = gb["max_magnitude"].shift(lag)
 
-        g["days_since_last_event"] = days_since_binary_event((g["event_count"] > 0).astype(int))
-        g["days_since_last_strong_event"] = days_since_binary_event((g["strong_event_count"] > 0).astype(int))
+    # Gün farkı hesaplamaları
+    df["days_since_last_event"] = gb["event_count"].transform(lambda x: days_since_binary_event((x > 0).astype(int)))
+    df["days_since_last_strong_event"] = gb["strong_event_count"].transform(lambda x: days_since_binary_event((x > 0).astype(int)))
 
-        # Acceleration / change features from past windows.
-        g["event_acceleration_7_vs_30"] = g["event_count_past_7d"] - (g["event_count_past_30d"] / 30 * 7)
-        g["strong_acceleration_7_vs_90"] = g["strong_count_past_7d"] - (g["strong_count_past_90d"] / 90 * 7)
-        g["energy_acceleration_7_vs_30"] = g["energy_log_sum_past_7d"] - (g["energy_log_sum_past_30d"] / 30 * 7)
+    # İvmelenme (Acceleration) özellikleri
+    df["event_acceleration_7_vs_30"] = df["event_count_past_7d"] - (df["event_count_past_30d"] / 30 * 7)
+    df["strong_acceleration_7_vs_90"] = df["strong_count_past_7d"] - (df["strong_count_past_90d"] / 90 * 7)
+    df["energy_acceleration_7_vs_30"] = df["energy_log_sum_past_7d"] - (df["energy_log_sum_past_30d"] / 30 * 7)
 
-        g = optimize_memory(g)
-        pieces.append(g)
-
-    feat = pd.concat(pieces, axis=0).sort_values(["date", "cell_id"]).reset_index(drop=True)
+    # Döngü ve parça birleştirme çöpe gitti, direkt df üzerinden devam
+    feat = optimize_memory(df)
     feat = add_exogenous_features(feat)
     feat = add_fault_proxy(feat)
     feat = optimize_memory(feat)
 
-    # En kritik: bugün gerçekleşen deprem bilgilerini feature olarak kullanma.
-    # Çünkü amaç gün başında gelecek 7 gün riskini tahmin etmek.
     leakage_today_cols = [
         "event_count", "strong_event_count", "has_event_today", "has_strong_event_today",
         "max_magnitude", "mean_magnitude", "std_magnitude", "mean_depth_km", "min_depth_km"
     ]
-    # Bu kolonları rapor/prediction için tutabiliriz ama model feature listesine almayacağız.
 
-    # Boolean filtrelerde gereksiz büyük blok kopyalarını azaltmak için önce kolonları downcast ettik.
     feat = feat.loc[feat["is_label_known"]].reset_index(drop=True)
     feat = feat.replace([np.inf, -np.inf], np.nan)
 
-    # 30 gün warm-up bırak: ilk günlerde geçmiş feature yok.
     warmup_cut = pd.Timestamp(cfg.panel_start_date) + pd.Timedelta(days=30)
     feat = feat.loc[feat["date"] >= warmup_cut].reset_index(drop=True)
 
-    # Bellek ve sınıf dengesizliği için eğitim panelini kompaktlaştır:
-    # Tüm pozitif günleri tut, negatifleri yıl bazında örnekle. Test/validation split yine kronolojik yapılır.
     if getattr(cfg, "negative_sample_ratio", 0):
         rng = np.random.default_rng(cfg.random_state)
         positives = feat[feat["target_future_7d_m4"] == 1]
@@ -805,7 +805,7 @@ def make_preprocessor(numeric: List[str], categorical: List[str]) -> ColumnTrans
     ])
     cat_pipe = Pipeline([
         ("imputer", SimpleImputer(strategy="most_frequent")),
-        ("onehot", OneHotEncoder(handle_unknown="ignore", min_frequency=30, sparse_output=True)),
+        ("onehot", OneHotEncoder(handle_unknown="ignore", min_frequency=30, sparse_output=False)),
     ])
     return ColumnTransformer([
         ("num", num_pipe, numeric),

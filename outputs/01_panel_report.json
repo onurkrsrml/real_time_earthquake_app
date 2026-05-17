@@ -1,0 +1,14 @@
+{
+  "panel_shape": [
+    3070056,
+    23
+  ],
+  "cell_count": 232,
+  "date_min": "1990-01-01 00:00:00",
+  "date_max": "2026-03-25 00:00:00",
+  "event_day_rate": 0.006639944027079636,
+  "strong_event_day_rate": 0.00164231531932968,
+  "min_cell_events": 8,
+  "lat_bin_size": 0.75,
+  "lon_bin_size": 0.75
+}

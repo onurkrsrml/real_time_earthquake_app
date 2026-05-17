@@ -1,0 +1,90 @@
+{
+  "positive_rate": 0.14838413409103954,
+  "predicted_positive_rate": 0.18695826875609897,
+  "threshold": 0.30462184873949577,
+  "average_precision_auc_pr": 0.43836337305254147,
+  "brier_score": 0.10338211273224497,
+  "f1": 0.4608010955152345,
+  "precision": 0.4132637396377034,
+  "recall": 0.5206963249516441,
+  "confusion_matrix": [
+    [
+      12925,
+      1911
+    ],
+    [
+      1239,
+      1346
+    ]
+  ],
+  "classification_report": {
+    "0": {
+      "precision": 0.9125247105337475,
+      "recall": 0.8711916958748989,
+      "f1-score": 0.8913793103448275,
+      "support": 14836.0
+    },
+    "1": {
+      "precision": 0.4132637396377034,
+      "recall": 0.5206963249516441,
+      "f1-score": 0.4608010955152345,
+      "support": 2585.0
+    },
+    "accuracy": 0.819183743757534,
+    "macro avg": {
+      "precision": 0.6628942250857255,
+      "recall": 0.6959440104132715,
+      "f1-score": 0.6760902029300311,
+      "support": 17421.0
+    },
+    "weighted avg": {
+      "precision": 0.8384423036818863,
+      "recall": 0.819183743757534,
+      "f1-score": 0.8274883347788727,
+      "support": 17421.0
+    }
+  },
+  "roc_auc": 0.7931465127691386,
+  "auc_pr_95ci": [
+    0.4213506771378365,
+    0.45632524619401754
+  ],
+  "roc_auc_95ci": [
+    0.7841988920846037,
+    0.8009372244493443
+  ],
+  "threshold_info_from_validation": {
+    "threshold": 0.30462184873949577,
+    "precision": 0.4815950920245399,
+    "recall": 0.5924528301886792,
+    "f1": 0.5313028764800467
+  },
+  "best_params": {
+    "learning_rate": 0.013225317293225418,
+    "max_iter": 320,
+    "max_leaf_nodes": 17,
+    "l2_regularization": 8.728673384861883
+  },
+  "calibration_status": "isotonic_frozen_estimator",
+  "config": {
+    "input_file": "depremler_hava_nasa.csv",
+    "output_dir": "outputs",
+    "horizon_days": 7,
+    "target_mag_threshold": 4.0,
+    "lat_bin_size": 0.75,
+    "lon_bin_size": 0.75,
+    "min_cell_events": 8,
+    "panel_start_date": "1990-01-01",
+    "validation_start_date": "2022-01-01",
+    "test_start_date": "2024-01-01",
+    "n_trials": 20,
+    "n_splits": 5,
+    "max_rows_for_optuna": 250000,
+    "max_rows_for_training": 500000,
+    "max_rows_for_shap": 3000,
+    "random_state": 42,
+    "min_precision_for_threshold": 0.35,
+    "negative_sample_ratio": 8,
+    "show_plots": true
+  }
+}

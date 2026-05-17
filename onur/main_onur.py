@@ -213,7 +213,7 @@ warnings.simplefilter(action="ignore")
 # Load Df
 print("\n", "Load Df", "\n", "_" * 30, "\n")
 def load_df():
-    data = pd.read_csv("../data/earthquakes_featured.csv", low_memory=False)
+    data = pd.read_csv("data/earthquakes_featured.csv", low_memory=False)
     return data
 df = load_df()
 
@@ -663,8 +663,8 @@ final_model_days = RandomForestRegressor(**study_days.best_params, random_state=
 final_model_mag.fit(X, y_mag)
 final_model_days.fit(X, y_days)
 
-joblib.dump(final_model_days, '../onur/model_deepfault_days.pkl')
-joblib.dump(final_model_mag, '../onur/model_deepfault_mag.pkl')
+joblib.dump(final_model_days, 'onur/model_deepfault_days.pkl')
+joblib.dump(final_model_mag, 'onur/model_deepfault_mag.pkl')
 
 print("Final Models have been trained with walk-forward validated hyperparameters.")
 
