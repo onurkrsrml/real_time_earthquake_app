@@ -98,7 +98,9 @@ MODEL_DAYS_PATH = "onur/model_deepfault_days.pkl"
 MODEL_MAG_PATH = "onur/model_deepfault_mag.pkl"
 RISK_LOG_PATH = "onur/risk_log.csv"
 AGENT_LOG_PATH = "onur/n8n_agent_payloads.jsonl"
-WEBHOOK_URL = "http://localhost:5678/webhook-test/https://miuul-final-project-fraud-detection.streamlit.app/"
+DEFAULT_WEBHOOK_URL = "http://localhost:5678/webhook-test/https://miuul-final-project-fraud-detection.streamlit.app/"
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 
 CORE_FEATURES = [
     "magnitude",
@@ -199,9 +201,20 @@ def compute_risk_score(pred_mag, pred_days, confidence, w_mag, w_days, w_conf, m
     return float(risk * 100)
 
 
-def send_webhook(payload):
+def send_webhook(payload, url):
     try:
-        response = requests.post(WEBHOOK_URL, json=payload, timeout=15)
+        response = requests.post(url, json=payload, timeout=15)
+        return response.status_code, response.text
+    except Exception as exc:
+        return None, str(exc)
+
+
+def send_telegram_message(token: str, chat_id: str, message: str):
+    if not token or not chat_id:
+        return None, "Telegram token/chat_id eksik"
+    try:
+        url = f"https://api.telegram.org/bot{token}/sendMessage"
+        response = requests.post(url, json={"chat_id": chat_id, "text": message}, timeout=15)
         return response.status_code, response.text
     except Exception as exc:
         return None, str(exc)
@@ -258,6 +271,12 @@ days_scale = st.sidebar.slider("Gün Ölçek (Normalizasyon)", 7, 90, 30)
 st.sidebar.header("📡 Otomatik Uyarı")
 alert_enabled = st.sidebar.checkbox("Webhook uyarılarını etkinleştir", value=False)
 alert_min_level = st.sidebar.selectbox("Minimum seviye", ["Düşük", "Orta", "Yüksek"], index=1)
+webhook_url = st.sidebar.text_input("Webhook URL", value=DEFAULT_WEBHOOK_URL)
+show_webhook_details = st.sidebar.checkbox("Webhook cevabını göster", value=True)
+
+st.sidebar.header("📨 Telegram")
+telegram_enabled = st.sidebar.checkbox("Telegram bildirimi", value=False)
+telegram_chat_id = st.sidebar.text_input("Telegram Chat ID", value=TELEGRAM_CHAT_ID)
 
 # ------------------------------------------------------------
 # PRESENTATION MODE
@@ -419,13 +438,38 @@ with analysis_tab:
                 levels = {"Düşük": 1, "Orta": 2, "Yüksek": 3}
                 if levels.get(label, 0) >= levels.get(alert_min_level, 2):
                     if st.button("🚨 Webhook Uyarısı Gönder"):
-                        status, text = send_webhook({"type": "risk_alert", **risk_payload})
+                        status, text = send_webhook({"type": "risk_alert", **risk_payload}, webhook_url)
+                        st.session_state["webhook_response"] = {
+                            "status": status,
+                            "text": text,
+                            "payload": {"type": "risk_alert", **risk_payload},
+                        }
                         if status and 200 <= status < 300:
                             st.success("Webhook uyarısı gönderildi.")
                         else:
                             st.error(f"Webhook gönderilemedi: {text}")
+
+            # Telegram alert
+            if telegram_enabled:
+                levels = {"Düşük": 1, "Orta": 2, "Yüksek": 3}
+                if levels.get(label, 0) >= levels.get(alert_min_level, 2):
+                    if st.button("📨 Telegram Uyarısı Gönder"):
+                        message = f"Risk: {label} ({risk_score:.1f}/100) | Mag: {pred_mag:.2f} | Gün: {pred_days:.1f}"
+                        status, text = send_telegram_message(TELEGRAM_BOT_TOKEN, telegram_chat_id, message)
+                        st.session_state["telegram_response"] = {"status": status, "text": text}
+                        if status and 200 <= status < 300:
+                            st.success("Telegram mesajı gönderildi.")
+                        else:
+                            st.error(f"Telegram gönderilemedi: {text}")
         else:
             st.info("Risk skoru için gerekli tahminler bulunamadı.")
+
+        if show_webhook_details and "webhook_response" in st.session_state:
+            with st.expander("🔎 Webhook Yanıtı Detayı"):
+                st.json(st.session_state["webhook_response"])
+        if "telegram_response" in st.session_state:
+            with st.expander("🔎 Telegram Yanıtı Detayı"):
+                st.json(st.session_state["telegram_response"])
 
         # ------------------------------------------------------------
         # RISK LOGGING + EXPORT
@@ -728,7 +772,12 @@ with scenario_tab:
                         os.makedirs(os.path.dirname(AGENT_LOG_PATH), exist_ok=True)
                         with open(AGENT_LOG_PATH, "a", encoding="utf-8") as f:
                             f.write(json.dumps(agent_payload, ensure_ascii=False) + "\n")
-                        status, text = send_webhook({"type": "agent_payload", **agent_payload})
+                        status, text = send_webhook({"type": "agent_payload", **agent_payload}, webhook_url)
+                        st.session_state["webhook_response"] = {
+                            "status": status,
+                            "text": text,
+                            "payload": {"type": "agent_payload", **agent_payload},
+                        }
                         if status and 200 <= status < 300:
                             st.success("Agent payload gönderildi.")
                         else:
