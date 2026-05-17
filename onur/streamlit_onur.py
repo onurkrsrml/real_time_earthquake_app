@@ -15,6 +15,48 @@ st.set_page_config(
     page_icon="🌍"
 )
 
+# ------------------------------------------------------------
+# THEME / VISUAL SETTINGS
+# ------------------------------------------------------------
+st.sidebar.header("🎨 Tema & Görsel Ayarlar")
+selected_theme = st.sidebar.selectbox("Tema", ["Aydınlık", "Koyu"])
+accent_color = st.sidebar.color_picker("Vurgu Rengi", "#FF4B4B")
+
+if selected_theme == "Koyu":
+    bg_color = "#0E1117"
+    card_color = "#161B22"
+    text_color = "#E6EDF3"
+else:
+    bg_color = "#FFFFFF"
+    card_color = "#F6F8FA"
+    text_color = "#1F2328"
+
+st.markdown(
+    f"""
+    <style>
+        .stApp {{
+            background-color: {bg_color};
+            color: {text_color};
+        }}
+        .metric-card {{
+            background-color: {card_color};
+            padding: 16px;
+            border-radius: 12px;
+            border: 1px solid #e5e7eb;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+        }}
+        .accent {{
+            color: {accent_color};
+            font-weight: 700;
+        }}
+        .risk-bar > div > div {{
+            background-color: {accent_color} !important;
+        }}
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 st.title("🌍 EARLY WARNING EARTHQUAKE APP")
 st.markdown(
     "Bu uygulama **deprem erken uyarı modeli**nin amaçlarını, hedef değişkenlerini ve tahminlerini **interaktif** şekilde sunar."
@@ -130,6 +172,26 @@ except Exception:
     model_mag, model_days = None, None
 
 # ------------------------------------------------------------
+# USER-CONTROLLED THRESHOLDS & RISK WEIGHTS
+# ------------------------------------------------------------
+st.sidebar.header("🚨 Uyarı Eşikleri")
+mag_threshold_high = st.sidebar.slider("Yüksek Risk Magnitude", 4.0, 7.0, 5.0, 0.1)
+mag_threshold_mid = st.sidebar.slider("Orta Risk Magnitude", 3.0, mag_threshold_high, 4.0, 0.1)
+
+short_days = st.sidebar.slider("Kısa Süre (gün)", 1, 21, 7)
+mid_days = st.sidebar.slider("Orta Süre (gün)", short_days, 90, 30)
+
+st.sidebar.header("📊 Risk Skoru Ağırlıkları")
+w_mag = st.sidebar.slider("Magnitude Ağırlığı", 0.0, 1.0, 0.5, 0.05)
+w_days = st.sidebar.slider("Gün Ağırlığı", 0.0, 1.0, 0.3, 0.05)
+w_conf = st.sidebar.slider("Confidence Ağırlığı", 0.0, 1.0, 0.2, 0.05)
+
+mag_scale = st.sidebar.slider("Magnitude Ölçek (Normalizasyon)", 5.0, 8.0, 7.0, 0.1)
+days_scale = st.sidebar.slider("Gün Ölçek (Normalizasyon)", 7, 90, 30)
+
+weight_sum = max(w_mag + w_days + w_conf, 1e-6)
+
+# ------------------------------------------------------------
 # PRESENTATION MODE
 # ------------------------------------------------------------
 pres_tab, analysis_tab, scenario_tab, map_tab = st.tabs(
@@ -228,28 +290,50 @@ with analysis_tab:
         latest = tmp_pred.tail(1).iloc[0]
         pred_mag = latest.get("pred_future_max_magnitude_7d", np.nan)
         pred_days = latest.get("pred_days_to_next_major_event", np.nan)
+        confidence = latest.get("confidence", np.nan)
 
         col1, col2, col3 = st.columns(3)
         if not pd.isna(pred_mag):
-            if pred_mag >= 5.0:
+            if pred_mag >= mag_threshold_high:
                 col1.error(f"Yüksek Risk: Tahmini max magnitude {pred_mag:.2f}")
-            elif pred_mag >= 4.0:
+            elif pred_mag >= mag_threshold_mid:
                 col1.warning(f"Orta Risk: Tahmini max magnitude {pred_mag:.2f}")
             else:
                 col1.success(f"Düşük Risk: Tahmini max magnitude {pred_mag:.2f}")
 
         if not pd.isna(pred_days):
-            if pred_days <= 7:
+            if pred_days <= short_days:
                 col2.error(f"Kısa Süre: {pred_days:.1f} gün")
-            elif pred_days <= 30:
+            elif pred_days <= mid_days:
                 col2.warning(f"Orta Süre: {pred_days:.1f} gün")
             else:
                 col2.success(f"Uzun Süre: {pred_days:.1f} gün")
 
-        if "confidence" in latest:
-            col3.metric("Confidence", f"{latest['confidence']:.2f}")
+        if not pd.isna(confidence):
+            col3.metric("Confidence", f"{confidence:.2f}")
         else:
             col3.info("Confidence skoru kayıtlı değil.")
+
+        # ------------------------------------------------------------
+        # RISK SCORE
+        # ------------------------------------------------------------
+        st.subheader("🧮 Risk Skoru")
+        if not pd.isna(pred_mag) and not pd.isna(pred_days):
+            norm_mag = min(pred_mag / mag_scale, 1.0)
+            norm_days = 1.0 - min(pred_days / days_scale, 1.0)
+            norm_conf = 0.0 if pd.isna(confidence) else min(confidence, 1.0)
+
+            risk = (
+                (w_mag * norm_mag) +
+                (w_days * norm_days) +
+                (w_conf * norm_conf)
+            ) / weight_sum
+            risk_score = float(risk * 100)
+
+            st.markdown(f"**Risk Skoru:** <span class='accent'>{risk_score:.1f}/100</span>", unsafe_allow_html=True)
+            st.progress(min(int(risk_score), 100), text="Risk seviyesi")
+        else:
+            st.info("Risk skoru için gerekli tahminler bulunamadı.")
     else:
         st.info("Eşik paneli için predictions_table_onur.csv bulunamadı.")
 
