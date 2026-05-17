@@ -93,6 +93,14 @@ def load_models():
     return model_mag, model_days
 
 # ------------------------------------------------------------
+# HELPERS
+# ------------------------------------------------------------
+def format_delta(value):
+    if pd.isna(value):
+        return "-"
+    return f"{value:+.2f}" if isinstance(value, (int, float, np.number)) else str(value)
+
+# ------------------------------------------------------------
 # DATA LOADING
 # ------------------------------------------------------------
 metadata = None
@@ -122,246 +130,354 @@ except Exception:
     model_mag, model_days = None, None
 
 # ------------------------------------------------------------
-# OVERVIEW
+# PRESENTATION MODE
 # ------------------------------------------------------------
-st.subheader("🎯 Model Amacı ve Hedef Değişkenler")
-st.markdown(
-    "Bu model, tarihsel deprem verilerini ve jeofiziksel sinyalleri kullanarak **gelecek 7 gün için maksimum büyüklük** ve **bir sonraki büyük depreme kalan gün** tahminlerini üretir."
+pres_tab, analysis_tab, scenario_tab, map_tab = st.tabs(
+    ["🎬 Sunum Modu", "📊 Analiz", "🧪 Senaryo", "🗺️ Harita"]
 )
 
-col_a, col_b = st.columns(2)
-with col_a:
-    st.markdown("**Hedef 1: future_max_magnitude_7d**")
-    st.info(TARGETS_INFO["future_max_magnitude_7d"])
-with col_b:
-    st.markdown("**Hedef 2: days_to_next_major_event**")
-    st.info(TARGETS_INFO["days_to_next_major_event"])
+with pres_tab:
+    st.subheader("🎯 Model Amacı ve Hedef Değişkenler")
+    st.markdown(
+        "Bu model, tarihsel deprem verilerini ve jeofiziksel sinyalleri kullanarak **gelecek 7 gün için maksimum büyüklük** ve **bir sonraki büyük depreme kalan gün** tahminlerini üretir."
+    )
 
-if metadata:
-    st.markdown("### 📌 Model Meta Verileri")
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Model Versiyon", metadata.get("model_version", "-"))
-    c2.metric("Veri Satır Sayısı", metadata.get("rows", "-"))
-    c3.metric("Feature Sayısı", metadata.get("feature_count", "-"))
-    c4.metric("Üretim Tarihi", metadata.get("generated_at", "-"))
+    col_a, col_b = st.columns(2)
+    with col_a:
+        st.markdown("**Hedef 1: future_max_magnitude_7d**")
+        st.info(TARGETS_INFO["future_max_magnitude_7d"])
+    with col_b:
+        st.markdown("**Hedef 2: days_to_next_major_event**")
+        st.info(TARGETS_INFO["days_to_next_major_event"])
 
-    st.markdown("#### ✅ En iyi hiperparametreler")
-    st.json(metadata.get("best_params", {}))
+    st.markdown("### 🧭 Sunum Akışı")
+    st.markdown(
+        "1. Model amacı ve hedefler\n"
+        "2. Veri ve model metrikleri\n"
+        "3. Risk ve uyarı paneli\n"
+        "4. Senaryo analizleri ve tahminler\n"
+        "5. Harita tabanlı görselleştirme"
+    )
 
-    st.markdown("#### 📉 Cross-Validation Metikleri")
-    st.json(metadata.get("cv_metrics", {}))
-else:
-    st.warning("OUTPUTS_onur.json bulunamadı. Model meta verileri gösterilemiyor.")
+    if metadata:
+        st.markdown("### 📌 Model Meta Verileri")
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Model Versiyon", metadata.get("model_version", "-"))
+        c2.metric("Veri Satır Sayısı", metadata.get("rows", "-"))
+        c3.metric("Feature Sayısı", metadata.get("feature_count", "-"))
+        c4.metric("Üretim Tarihi", metadata.get("generated_at", "-"))
 
-# ------------------------------------------------------------
-# DATA SUMMARY
-# ------------------------------------------------------------
-st.subheader("📊 Veri Özeti")
-if df is not None:
-    if "time" in df.columns and "date" not in df.columns:
-        df["date"] = pd.to_datetime(df["time"], errors="coerce")
-    elif "date" in df.columns:
-        df["date"] = pd.to_datetime(df["date"], errors="coerce")
-
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Toplam Kayıt", f"{df.shape[0]:,}")
-    col2.metric("Kolon Sayısı", f"{df.shape[1]:,}")
-    if "date" in df.columns:
-        col3.metric("Tarih Aralığı", f"{df['date'].min().date()} → {df['date'].max().date()}")
-
-    with st.expander("Örnek Veri"):
-        st.dataframe(df.head(50))
-
-    if "magnitude" in df.columns:
-        st.markdown("**Büyüklük Dağılımı**")
-        st.bar_chart(df["magnitude"].value_counts().sort_index())
-
-    if "region" in df.columns:
-        st.markdown("**Bölge Dağılımı (Top 20)**")
-        region_counts = df["region"].value_counts().head(20)
-        st.bar_chart(region_counts)
-else:
-    st.warning("data/earthquakes_featured.csv bulunamadı veya okunamadı.")
-
-# ------------------------------------------------------------
-# INTERACTIVE WHAT-IF PREDICTION
-# ------------------------------------------------------------
-st.subheader("🧪 Senaryo Analizi (What-if)")
-
-if pred_df is None and df is None:
-    st.error("Tahmin veya ana veri seti yok. Önce veri dosyalarını yüklemelisin.")
-else:
-    base_df = pred_df if pred_df is not None else df
-
-    if "date" in base_df.columns:
-        base_df["date"] = pd.to_datetime(base_df["date"], errors="coerce")
-
-    # Sidebar controls
-    st.sidebar.header("🧭 Senaryo Seçimi")
-
-    if "region" in base_df.columns:
-        region_list = sorted(base_df["region"].dropna().unique().tolist())
-        selected_region = st.sidebar.selectbox("Bölge", ["Tümü"] + region_list)
+        st.markdown("#### 📉 Cross-Validation Metikleri")
+        st.json(metadata.get("cv_metrics", {}))
     else:
-        selected_region = "Tümü"
+        st.warning("OUTPUTS_onur.json bulunamadı. Model meta verileri gösterilemiyor.")
 
-    if "date" in base_df.columns:
-        min_date = base_df["date"].min().date()
-        max_date = base_df["date"].max().date()
-        selected_date = st.sidebar.date_input("Tarih", value=max_date, min_value=min_date, max_value=max_date)
+with analysis_tab:
+    # ------------------------------------------------------------
+    # KPI PANEL
+    # ------------------------------------------------------------
+    st.subheader("📌 KPI Paneli (Trendli)")
+
+    if pred_df is not None:
+        tmp_pred = pred_df.copy()
+        if "date" in tmp_pred.columns:
+            tmp_pred["date"] = pd.to_datetime(tmp_pred["date"], errors="coerce")
+            tmp_pred = tmp_pred.sort_values("date")
+
+        latest = tmp_pred.tail(1).iloc[0]
+        prev = tmp_pred.tail(2).head(1).iloc[0] if len(tmp_pred) > 1 else latest
+
+        k1, k2, k3, k4 = st.columns(4)
+        if "pred_future_max_magnitude_7d" in tmp_pred.columns:
+            k1.metric(
+                "Tahmini Max Magnitude",
+                f"{latest['pred_future_max_magnitude_7d']:.2f}",
+                delta=format_delta(latest["pred_future_max_magnitude_7d"] - prev["pred_future_max_magnitude_7d"])
+            )
+        if "pred_days_to_next_major_event" in tmp_pred.columns:
+            k2.metric(
+                "Sonraki Büyük Olay (gün)",
+                f"{latest['pred_days_to_next_major_event']:.1f}",
+                delta=format_delta(latest["pred_days_to_next_major_event"] - prev["pred_days_to_next_major_event"])
+            )
+        if "magnitude" in tmp_pred.columns:
+            k3.metric(
+                "Son Gözlenen Magnitude",
+                f"{latest['magnitude']:.2f}",
+                delta=format_delta(latest["magnitude"] - prev["magnitude"])
+            )
+        if "depth" in tmp_pred.columns:
+            k4.metric(
+                "Son Derinlik (km)",
+                f"{latest['depth']:.1f}",
+                delta=format_delta(latest["depth"] - prev["depth"])
+            )
     else:
-        selected_date = None
+        st.info("KPI için predictions_table_onur.csv bulunamadı.")
 
-    filtered = base_df.copy()
-    if selected_region != "Tümü" and "region" in filtered.columns:
-        filtered = filtered[filtered["region"] == selected_region]
+    # ------------------------------------------------------------
+    # EŞİK BAZLI UYARI PANELİ
+    # ------------------------------------------------------------
+    st.subheader("🚨 Eşik Bazlı Uyarı Paneli")
+    if pred_df is not None:
+        tmp_pred = pred_df.copy()
+        if "date" in tmp_pred.columns:
+            tmp_pred["date"] = pd.to_datetime(tmp_pred["date"], errors="coerce")
+            tmp_pred = tmp_pred.sort_values("date")
 
-    if selected_date and "date" in filtered.columns:
-        filtered = filtered[filtered["date"].dt.date <= selected_date]
+        latest = tmp_pred.tail(1).iloc[0]
+        pred_mag = latest.get("pred_future_max_magnitude_7d", np.nan)
+        pred_days = latest.get("pred_days_to_next_major_event", np.nan)
 
-    if len(filtered) == 0:
-        st.warning("Seçilen filtrelerle veri bulunamadı. Filtreleri genişlet.")
-    else:
-        base_row = filtered.tail(1).iloc[0].to_dict()
+        col1, col2, col3 = st.columns(3)
+        if not pd.isna(pred_mag):
+            if pred_mag >= 5.0:
+                col1.error(f"Yüksek Risk: Tahmini max magnitude {pred_mag:.2f}")
+            elif pred_mag >= 4.0:
+                col1.warning(f"Orta Risk: Tahmini max magnitude {pred_mag:.2f}")
+            else:
+                col1.success(f"Düşük Risk: Tahmini max magnitude {pred_mag:.2f}")
 
-        st.markdown("**Seçilen baz kayıt**")
-        st.dataframe(pd.DataFrame([base_row]))
+        if not pd.isna(pred_days):
+            if pred_days <= 7:
+                col2.error(f"Kısa Süre: {pred_days:.1f} gün")
+            elif pred_days <= 30:
+                col2.warning(f"Orta Süre: {pred_days:.1f} gün")
+            else:
+                col2.success(f"Uzun Süre: {pred_days:.1f} gün")
 
-        # Editable feature panel
-        st.markdown("### 🔧 Özellikleri Değiştir")
-        updated_row = base_row.copy()
-
-        editable_features = [f for f in CORE_FEATURES if f in base_row]
-        if not editable_features:
-            st.info("Düzenlenebilir feature bulunamadı.")
+        if "confidence" in latest:
+            col3.metric("Confidence", f"{latest['confidence']:.2f}")
         else:
-            cols = st.columns(3)
-            for idx, feature in enumerate(editable_features):
-                col = cols[idx % 3]
-                value = base_row.get(feature, 0.0)
+            col3.info("Confidence skoru kayıtlı değil.")
+    else:
+        st.info("Eşik paneli için predictions_table_onur.csv bulunamadı.")
 
-                if isinstance(value, (int, float, np.number)):
-                    if df is not None and feature in df.columns:
-                        vmin = float(np.nanpercentile(df[feature], 5))
-                        vmax = float(np.nanpercentile(df[feature], 95))
+    # ------------------------------------------------------------
+    # FEATURE IMPORTANCE (SHAP benzeri)
+    # ------------------------------------------------------------
+    st.subheader("🧠 Feature Importance (Model Etkileri)")
+    if metadata and model_mag is not None:
+        feature_list = metadata.get("features", [])
+        importances = model_mag.feature_importances_
+        fi_df = pd.DataFrame({"feature": feature_list, "importance": importances})
+        fi_df = fi_df.sort_values("importance", ascending=False).head(20)
+        st.bar_chart(fi_df.set_index("feature"))
+        st.caption("Not: RandomForest feature_importances_ kullanıldı (SHAP benzeri hızlı açıklama).")
+    else:
+        st.info("Model veya feature listesi bulunamadı. Feature importance gösterilemiyor.")
+
+    # ------------------------------------------------------------
+    # DATA SUMMARY
+    # ------------------------------------------------------------
+    st.subheader("📊 Veri Özeti")
+    if df is not None:
+        if "time" in df.columns and "date" not in df.columns:
+            df["date"] = pd.to_datetime(df["time"], errors="coerce")
+        elif "date" in df.columns:
+            df["date"] = pd.to_datetime(df["date"], errors="coerce")
+
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Toplam Kayıt", f"{df.shape[0]:,}")
+        col2.metric("Kolon Sayısı", f"{df.shape[1]:,}")
+        if "date" in df.columns:
+            col3.metric("Tarih Aralığı", f"{df['date'].min().date()} → {df['date'].max().date()}")
+
+        with st.expander("Örnek Veri"):
+            st.dataframe(df.head(50))
+
+        if "magnitude" in df.columns:
+            st.markdown("**Büyüklük Dağılımı**")
+            st.bar_chart(df["magnitude"].value_counts().sort_index())
+
+        if "region" in df.columns:
+            st.markdown("**Bölge Dağılımı (Top 20)**")
+            region_counts = df["region"].value_counts().head(20)
+            st.bar_chart(region_counts)
+    else:
+        st.warning("data/earthquakes_featured.csv bulunamadı veya okunamadı.")
+
+    # ------------------------------------------------------------
+    # VISUALS
+    # ------------------------------------------------------------
+    st.subheader("📈 Gerçek vs Tahmin Grafikleri")
+    if pred_df is not None and "date" in pred_df.columns:
+        pred_df["date"] = pd.to_datetime(pred_df["date"], errors="coerce")
+
+        if "future_max_magnitude_7d" in pred_df.columns and "pred_future_max_magnitude_7d" in pred_df.columns:
+            st.markdown("**Max Magnitude (7 gün)**")
+            st.line_chart(
+                pred_df.set_index("date")[["future_max_magnitude_7d", "pred_future_max_magnitude_7d"]],
+                use_container_width=True,
+            )
+
+        if "days_to_next_major_event" in pred_df.columns and "pred_days_to_next_major_event" in pred_df.columns:
+            st.markdown("**Days to Next Major Event**")
+            st.line_chart(
+                pred_df.set_index("date")[["days_to_next_major_event", "pred_days_to_next_major_event"]],
+                use_container_width=True,
+            )
+    else:
+        st.info("predictions_table_onur.csv bulunamadı.")
+
+with scenario_tab:
+    # ------------------------------------------------------------
+    # INTERACTIVE WHAT-IF PREDICTION
+    # ------------------------------------------------------------
+    st.subheader("🧪 Senaryo Analizi (What-if)")
+
+    if pred_df is None and df is None:
+        st.error("Tahmin veya ana veri seti yok. Önce veri dosyalarını yüklemelisin.")
+    else:
+        base_df = pred_df if pred_df is not None else df
+
+        if "date" in base_df.columns:
+            base_df["date"] = pd.to_datetime(base_df["date"], errors="coerce")
+
+        # Sidebar controls
+        st.sidebar.header("🧭 Senaryo Seçimi")
+
+        if "region" in base_df.columns:
+            region_list = sorted(base_df["region"].dropna().unique().tolist())
+            selected_region = st.sidebar.selectbox("Bölge", ["Tümü"] + region_list)
+        else:
+            selected_region = "Tümü"
+
+        if "date" in base_df.columns:
+            min_date = base_df["date"].min().date()
+            max_date = base_df["date"].max().date()
+            selected_date = st.sidebar.date_input("Tarih", value=max_date, min_value=min_date, max_value=max_date)
+        else:
+            selected_date = None
+
+        filtered = base_df.copy()
+        if selected_region != "Tümü" and "region" in filtered.columns:
+            filtered = filtered[filtered["region"] == selected_region]
+
+        if selected_date and "date" in filtered.columns:
+            filtered = filtered[filtered["date"].dt.date <= selected_date]
+
+        if len(filtered) == 0:
+            st.warning("Seçilen filtrelerle veri bulunamadı. Filtreleri genişlet.")
+        else:
+            base_row = filtered.tail(1).iloc[0].to_dict()
+
+            st.markdown("**Seçilen baz kayıt**")
+            st.dataframe(pd.DataFrame([base_row]))
+
+            # Editable feature panel
+            st.markdown("### 🔧 Özellikleri Değiştir")
+            updated_row = base_row.copy()
+
+            editable_features = [f for f in CORE_FEATURES if f in base_row]
+            if not editable_features:
+                st.info("Düzenlenebilir feature bulunamadı.")
+            else:
+                cols = st.columns(3)
+                for idx, feature in enumerate(editable_features):
+                    col = cols[idx % 3]
+                    value = base_row.get(feature, 0.0)
+
+                    if isinstance(value, (int, float, np.number)):
+                        if df is not None and feature in df.columns:
+                            vmin = float(np.nanpercentile(df[feature], 5))
+                            vmax = float(np.nanpercentile(df[feature], 95))
+                        else:
+                            vmin = float(value) - abs(float(value))
+                            vmax = float(value) + abs(float(value)) + 1
+
+                        if vmin == vmax:
+                            vmin, vmax = vmin - 1, vmax + 1
+
+                        updated_row[feature] = col.slider(
+                            feature,
+                            min_value=vmin,
+                            max_value=vmax,
+                            value=float(value),
+                            step=(vmax - vmin) / 100 if vmax != vmin else 0.1,
+                        )
                     else:
-                        vmin = float(value) - abs(float(value))
-                        vmax = float(value) + abs(float(value)) + 1
+                        updated_row[feature] = col.text_input(feature, value=str(value))
 
-                    if vmin == vmax:
-                        vmin, vmax = vmin - 1, vmax + 1
+            # Recompute date features if user chooses
+            if "date" in updated_row and selected_date:
+                date_obj = pd.to_datetime(selected_date)
+                updated_row["date"] = date_obj
+                updated_row["year"] = date_obj.year
+                updated_row["month"] = date_obj.month
+                updated_row["day"] = date_obj.day
+                updated_row["day_of_week"] = date_obj.dayofweek
+                updated_row["season"] = date_obj.month % 12 // 3 + 1
 
-                    updated_row[feature] = col.slider(
-                        feature,
-                        min_value=vmin,
-                        max_value=vmax,
-                        value=float(value),
-                        step=(vmax - vmin) / 100 if vmax != vmin else 0.1,
-                    )
-                else:
-                    updated_row[feature] = col.text_input(feature, value=str(value))
+            # Prediction
+            st.markdown("### ✅ Tahmin Sonuçları")
+            if metadata and model_mag and model_days:
+                feature_list = metadata.get("features", [])
+                X_row = pd.DataFrame([updated_row])
 
-        # Recompute date features if user chooses
-        if "date" in updated_row and selected_date:
-            date_obj = pd.to_datetime(selected_date)
-            updated_row["date"] = date_obj
-            updated_row["year"] = date_obj.year
-            updated_row["month"] = date_obj.month
-            updated_row["day"] = date_obj.day
-            updated_row["day_of_week"] = date_obj.dayofweek
-            updated_row["season"] = date_obj.month % 12 // 3 + 1
+                # Ensure all features exist
+                for feat in feature_list:
+                    if feat not in X_row.columns:
+                        X_row[feat] = 0
 
-        # Prediction
-        st.markdown("### ✅ Tahmin Sonuçları")
-        if metadata and model_mag and model_days:
-            feature_list = metadata.get("features", [])
-            X_row = pd.DataFrame([updated_row])
+                X_row = X_row[feature_list]
 
-            # Ensure all features exist
-            for feat in feature_list:
-                if feat not in X_row.columns:
-                    X_row[feat] = 0
+                # Predict
+                pred_mag = float(model_mag.predict(X_row)[0])
+                pred_days = float(model_days.predict(X_row)[0])
 
-            X_row = X_row[feature_list]
+                # Confidence (tree variance)
+                mag_tree_preds = np.array([tree.predict(X_row) for tree in model_mag.estimators_]).reshape(-1)
+                days_tree_preds = np.array([tree.predict(X_row) for tree in model_days.estimators_]).reshape(-1)
 
-            # Predict
-            pred_mag = float(model_mag.predict(X_row)[0])
-            pred_days = float(model_days.predict(X_row)[0])
+                std_mag = float(np.std(mag_tree_preds))
+                std_days = float(np.std(days_tree_preds))
 
-            # Confidence (tree variance)
-            mag_tree_preds = np.array([tree.predict(X_row) for tree in model_mag.estimators_]).reshape(-1)
-            days_tree_preds = np.array([tree.predict(X_row) for tree in model_days.estimators_]).reshape(-1)
+                cv_mag = std_mag / pred_mag if pred_mag > 0 else np.inf
+                cv_days = std_days / pred_days if pred_days > 0 else np.inf
 
-            std_mag = float(np.std(mag_tree_preds))
-            std_days = float(np.std(days_tree_preds))
+                confidence_mag = 1 / (1 + cv_mag)
+                confidence_days = 1 / (1 + cv_days)
+                confidence = float((confidence_mag + confidence_days) / 2)
 
-            cv_mag = std_mag / pred_mag if pred_mag > 0 else np.inf
-            cv_days = std_days / pred_days if pred_days > 0 else np.inf
+                col1, col2, col3 = st.columns(3)
+                col1.metric("Tahmini Max Magnitude (7g)", f"{pred_mag:.2f}")
+                col2.metric("Sonraki Büyük Olay (gün)", f"{pred_days:.1f}")
+                col3.metric("Confidence Skoru", f"{confidence:.2f}")
 
-            confidence_mag = 1 / (1 + cv_mag)
-            confidence_days = 1 / (1 + cv_days)
-            confidence = float((confidence_mag + confidence_days) / 2)
+                st.markdown("**Not:** Büyük olay eşiği = 4.0. Tahmin edilen gün sayısı bunun üstündeki olaya göre hesaplanır.")
+            else:
+                st.warning("Model dosyaları veya metadata eksik. Tahmin yapılamıyor.")
 
-            col1, col2, col3 = st.columns(3)
-            col1.metric("Tahmini Max Magnitude (7g)", f"{pred_mag:.2f}")
-            col2.metric("Sonraki Büyük Olay (gün)", f"{pred_days:.1f}")
-            col3.metric("Confidence Skoru", f"{confidence:.2f}")
+with map_tab:
+    # ------------------------------------------------------------
+    # LIVE MAP
+    # ------------------------------------------------------------
+    st.subheader("🗺️ Canlı Deprem Haritası")
 
-            st.markdown("**Not:** Büyük olay eşiği = 4.0. Tahmin edilen gün sayısı bunun üstündeki olaya göre hesaplanır.")
-        else:
-            st.warning("Model dosyaları veya metadata eksik. Tahmin yapılamıyor.")
+    if pred_df is not None and {"latitude", "longitude"}.issubset(pred_df.columns):
+        map_df = pred_df.dropna(subset=["latitude", "longitude"]).copy()
+        map_df["magnitude"] = map_df.get("magnitude", 0).fillna(0)
 
-# ------------------------------------------------------------
-# VISUALS
-# ------------------------------------------------------------
-st.subheader("📈 Gerçek vs Tahmin Grafikleri")
-if pred_df is not None and "date" in pred_df.columns:
-    pred_df["date"] = pd.to_datetime(pred_df["date"], errors="coerce")
-
-    if "future_max_magnitude_7d" in pred_df.columns and "pred_future_max_magnitude_7d" in pred_df.columns:
-        st.markdown("**Max Magnitude (7 gün)**")
-        st.line_chart(
-            pred_df.set_index("date")[["future_max_magnitude_7d", "pred_future_max_magnitude_7d"]],
-            use_container_width=True,
+        layer = pdk.Layer(
+            "ScatterplotLayer",
+            data=map_df,
+            get_position=["longitude", "latitude"],
+            get_radius=5000,
+            get_fill_color="[255, 100, 100, 140]",
+            pickable=True,
         )
 
-    if "days_to_next_major_event" in pred_df.columns and "pred_days_to_next_major_event" in pred_df.columns:
-        st.markdown("**Days to Next Major Event**")
-        st.line_chart(
-            pred_df.set_index("date")[["days_to_next_major_event", "pred_days_to_next_major_event"]],
-            use_container_width=True,
+        view_state = pdk.ViewState(
+            latitude=map_df["latitude"].mean(),
+            longitude=map_df["longitude"].mean(),
+            zoom=4,
+            pitch=0,
         )
-else:
-    st.info("predictions_table_onur.csv bulunamadı.")
 
-# ------------------------------------------------------------
-# LIVE MAP
-# ------------------------------------------------------------
-st.subheader("🗺️ Canlı Deprem Haritası")
-
-if pred_df is not None and {"latitude", "longitude"}.issubset(pred_df.columns):
-    map_df = pred_df.dropna(subset=["latitude", "longitude"]).copy()
-    map_df["magnitude"] = map_df.get("magnitude", 0).fillna(0)
-
-    layer = pdk.Layer(
-        "ScatterplotLayer",
-        data=map_df,
-        get_position=["longitude", "latitude"],
-        get_radius=5000,
-        get_fill_color="[255, 100, 100, 140]",
-        pickable=True,
-    )
-
-    view_state = pdk.ViewState(
-        latitude=map_df["latitude"].mean(),
-        longitude=map_df["longitude"].mean(),
-        zoom=4,
-        pitch=0,
-    )
-
-    st.pydeck_chart(pdk.Deck(layers=[layer], initial_view_state=view_state, tooltip={"text": "Mag: {magnitude}"}))
-else:
-    st.info("Harita için latitude/longitude kolonları bulunamadı.")
+        st.pydeck_chart(pdk.Deck(layers=[layer], initial_view_state=view_state, tooltip={"text": "Mag: {magnitude}"}))
+    else:
+        st.info("Harita için latitude/longitude kolonları bulunamadı.")
 
 # ------------------------------------------------------------
 # FOOTER
