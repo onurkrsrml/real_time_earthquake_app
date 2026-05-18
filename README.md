@@ -1,63 +1,196 @@
-# 🌍 AI-Powered Earthquake Risk & Early Warning System | Turkiye
+# DeepFault
 
-Welcome to the **AI-Powered Earthquake Risk & Early Warning System** project! This study is designed to perform comprehensive earthquake analysis and develop a potential early warning system tailored for Turkiye. We aim for a multi-dimensional approach by integrating seismic data with atmospheric, meteorological, and astronomical variables.
+**AI-Powered Earthquake Risk & Early Warning System** — Türkiye ve çevresi için yapay zeka destekli sismik risk değerlendirme ve görselleştirme platformu.
 
----
-
-## 📊 Dataset and Data Sources
-
-Our dataset is a unique blend of seismic events, weather conditions during those events, and solar/lunar activities. The data preparation and processing steps were seamlessly executed via `onur/main_onur.py`, and the resulting dataset is stored in `data/depremler_hava_nasa.csv`. 
-
-Currently, the data engineering phase is complete, and we have officially entered the analysis phase! 🚀
-
-### 📡 Data Sources
-- **🌋 USGS (United States Geological Survey):** Seismic data of earthquakes (location, magnitude, depth, etc.)
-- **🌦️ NASA POWER API:** Weather and meteorological data at the exact time of the earthquake
-- **🌒 Astronomical APIs & Calculations:** Moon phases and Solar activities (Sunspot counts, F10.7 flux)
+> **Önemli:** Bu uygulama resmi bir deprem erken uyarı sistemi değildir. Ürettiği skorlar istatistiksel olasılık tahminleridir; acil durumlarda [AFAD](https://www.afad.gov.tr/) ve yerel yetkilileri izleyin.
 
 ---
 
-## 🧬 Variables (Features)
+## Özellikler
 
-Below is the data dictionary for our core dataset (`data/depremler_hava_nasa.csv`):
+| Sekme | Açıklama |
+|--------|----------|
+| **Ana Sayfa** | Sistem özeti, KPI şeridi, logo ve yasal uyarı |
+| **Risk Haritası** | **Folium HeatMap** + **Plotly scatter_geo**; il, tarih aralığı ve yarıçapa duyarlı |
+| **Model Çıktıları** | Bölgesel risk zaman serisi, büyüklük dağılımı, grid hücreleri, günlük aktivite; veri yoksa grafik gizlenir |
+| **Canlı Çıkarım** | Rabia (XGBoost) + Onur (regresyon) birleşik skor ve ajan yorum özeti |
 
-| Feature | Description |
-| :--- | :--- |
-| **`id`** | Unique record number of the earthquake in the system. |
-| **`time`** | Exact date and time when the earthquake occurred. |
-| **`magnitude`** | The magnitude / severity of the earthquake. |
-| **`longitude`** | Longitude (East-West) coordinate of the epicenter. |
-| **`latitude`** | Latitude (North-South) coordinate of the epicenter. |
-| **`depth_km`** | Depth of the earthquake below the earth's surface in kilometers. |
-| **`state`** | Province or administrative region where the earthquake is affiliated. |
-| **`city_name`** | District or city center where the earthquake exactly occurred. |
-| **`country`** | The country where the earthquake occurred. |
-| **`moon_phase`** | The phase of the Moon on the date of the earthquake (illumination rate 0-100). |
-| **`sunspot_number`** | The number of sunspots measured on that day (indicator of solar activity). |
-| **`solar_flux_f107`**| The Solar radio flux (F10.7) measurement or calculated estimated value. |
-| **`weather_desc`** | General weather condition (e.g., Clear, Partly Cloudy, Rainy). |
-| **`temperature`** | Surface air temperature at the time of the earthquake (°C). |
-| **`humidity`** | Relative humidity in the air at the time of the earthquake (%). |
-| **`pressure`** | Atmospheric surface pressure at the time of the earthquake (hPa/millibars). |
+**Sidebar:** 81 il veya özel koordinat, agregasyon yarıçapı (km), tarih aralığı, webhook / Telegram bildirimi, kullanıcı notu.
 
 ---
 
-## 🛠️ Next Steps (Project is Ongoing)
+## Hızlı başlangıç
 
-The data preparation phase is successfully completed! As this project is actively ongoing, our upcoming milestones include:
-1. **🔍 Correlation Analysis:** Investigating the deep connections and potential relationships between seismic events and astronomical/meteorological data.
-2. **🤖 Predictive Modeling:** Developing robust prediction and early warning models using advanced Machine Learning algorithms and Time Series Analysis.
+### Gereksinimler
+
+- Python **3.10+** (önerilen: 3.11 veya 3.12)
+- Aşağıdaki veri ve model dosyalarının repoda mevcut olması (Git LFS ile gelir)
+
+### Kurulum
+
+```bash
+git clone <repo-url>
+cd real_time_earthquake_app
+
+python -m venv .venv
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
+
+pip install -r deepfault/requirements.txt
+```
+
+> Ana dizindeki `requirements.txt` tam ortam dökümüdür. Yalnızca Streamlit uygulaması için **`deepfault/requirements.txt`** yeterlidir.
+
+### Çalıştırma
+
+Proje kökünden:
+
+```bash
+streamlit run deepfault/app.py
+```
+
+Tarayıcıda genelde `http://localhost:8501` açılır.
+
+### Entegrasyon testi
+
+```bash
+python deepfault/test_integration.py
+```
+
+Beklenen çıktı: `ALL PASSED`
 
 ---
 
-## 👨‍💻 Developers
+## Modeller
 
-This project is brought to life by an enthusiastic team of data professionals:
+| Model | Dosya | Görev |
+|--------|--------|--------|
+| **Rabia · XGBoost (kalibre)** | `outputs/deepfault_Rabia_TIME_SERIES_V4_BEST_FINAL_calibrated_model.joblib` | 7 gün içinde M≥4 olasılığı (sınıflandırma) |
+| **Onur · Regresyon** | `onur/model_deepfault_mag.pkl`, `onur/model_deepfault_days.pkl` | Tahmini max büyüklük ve büyük olaya kalan gün |
 
-- **Onur KARASÜRMELİ** - *Data Scientist* 
-- **Rabia AŞIK** - *ML Engineer*
-- **Emirkan EFE** - *AI Engineer*
+Birleşik risk skoru her iki modelin çıktılarından türetilir. Tahmin grid verisi `outputs/05_test_predictions.csv` dosyasındadır.
+
+**Tahmin tarih aralığı:** `2024-01-01` → `2026-03-18` (sidebar otomatik sınırlar).
 
 ---
 
-*Stay tuned for more updates as we build a safer future with AI! 🛡️*
+## Veri kaynakları
+
+Ham olay verisi: `data/depremler_hava_nasa.csv`
+
+| Kaynak | İçerik |
+|--------|--------|
+| [USGS](https://earthquake.usgs.gov/) | Deprem konumu, büyüklük, derinlik |
+| [NASA POWER](https://power.larc.nasa.gov/) | Olay anı meteoroloji |
+| Astronomik hesaplamalar | Ay evresi, güneş lekesi, F10.7 akısı |
+
+### Temel sütunlar (`depremler_hava_nasa.csv`)
+
+| Sütun | Açıklama |
+|--------|----------|
+| `time` | Olay zamanı |
+| `magnitude` | Büyüklük (M) |
+| `latitude`, `longitude` | Episantr koordinatları |
+| `depth_km` | Derinlik (km) |
+| `state`, `city_name`, `country` | Konum bilgisi |
+| `moon_phase`, `sunspot_number`, `solar_flux_f107` | Astronomik değişkenler |
+| `temperature`, `humidity`, `pressure`, `weather_desc` | Hava durumu |
+
+---
+
+## Proje yapısı
+
+```
+real_time_earthquake_app/
+├── deepfault/                 # Ana Streamlit uygulaması
+│   ├── app.py                 # Giriş noktası
+│   ├── sidebar.py             # Kontrol paneli
+│   ├── inference.py           # Canlı model çıkarımı
+│   ├── analytics.py           # Tarih / yarıçap agregasyonları
+│   ├── maps.py                  # Folium + Plotly haritalar
+│   ├── charts.py                # Plotly grafikleri
+│   ├── features_rabia.py        # Canlı özellik üretimi
+│   ├── agent_commentary.py      # Ajan yorum metni
+│   ├── assets/                  # Logo vb.
+│   └── test_integration.py
+├── data/
+│   └── depremler_hava_nasa.csv
+├── outputs/
+│   ├── 05_test_predictions.csv
+│   ├── 04_model_metrics.json
+│   └── deepfault_Rabia_...joblib
+├── onur/                      # Regresyon modelleri ve pipeline
+├── rabia/                     # XGBoost eğitim / sunum
+├── emirkan/                   # Tutarlılık ve uyarı motoru (ayrı modül)
+└── README.md
+```
+
+---
+
+## Mimari (özet)
+
+```mermaid
+flowchart LR
+    subgraph Veri
+        USGS[USGS + NASA POWER]
+        CSV[data/depremler_hava_nasa.csv]
+        PRED[outputs/05_test_predictions.csv]
+    end
+    subgraph Modeller
+        R[Rabia XGBoost]
+        O[Onur Regresyon]
+    end
+    subgraph UI
+        ST[Streamlit deepfault/app.py]
+        MAP[Folium HeatMap]
+        GEO[Plotly scatter_geo]
+    end
+    USGS --> CSV
+    CSV --> R
+    CSV --> O
+    PRED --> ST
+    R --> ST
+    O --> ST
+    ST --> MAP
+    ST --> GEO
+```
+
+- **Oturum durumu:** İl/koordinat, yarıçap ve tarih aralığı değişince çıkarım otomatik yenilenir.
+- **Önbellek:** `@st.cache_data` ile harita ve tarih sınırları.
+- **Mock veri kullanılmaz;** tüm grafikler gerçek CSV ve model dosyalarından beslenir.
+
+---
+
+## Bildirimler (isteğe bağlı)
+
+Sidebar üzerinden:
+
+- **Webhook URL** — JSON payload ile harici ajan
+- **Telegram** — Bot token + chat ID
+
+“Ajan'a Gönder” ile seçili bölge, tarih aralığı ve model özeti iletilir.
+
+---
+
+## Geliştirici ekibi
+
+- **Rabia AŞIK** — ML Engineer (XGBoost)
+- **Emirkan EFE** — AI Engineer
+- **Onur KARASÜRMELİ** — Data Scientist (regresyon, veri mühendisliği)
+
+---
+
+## Lisans
+
+Bu depodaki `LICENSE` dosyasına bakın.
+
+---
+
+## İlgili alt projeler
+
+| Klasör | Açıklama |
+|--------|----------|
+| `rabia/` | XGBoost zaman serisi pipeline ve sunum |
+| `onur/` | Büyüklük / gün regresyon modelleri |
+| `emirkan/` | Tutarlılık motoru ve uyarı simülasyonu |
+
+Ana kullanıcı arayüzü **`deepfault/app.py`** üzerinden çalıştırılır.
